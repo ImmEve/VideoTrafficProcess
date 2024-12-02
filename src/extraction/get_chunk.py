@@ -12,7 +12,7 @@ class Traffic:
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.fingerpath = conf.get('get_chunk', 'fingerpath')
         self.pcap = pcap
-        self.url = 'https://www.youtube.com//watch?v=' + self.pcap.split(' ')[0]
+        self.url = 'https://www.youtube.com//watch?v=' + self.pcap.split('/')[-1].split(' ')[0]
 
     def get_videoflows(self):
         self.videoflows = {}
@@ -66,7 +66,8 @@ class Traffic:
             tsharkCall = [
                 self.tshark_path,
                 '-r', self.pcap,
-                '-Y', f'ip.dst=={videoflow[0]} && tcp.dstport=={videoflow[2]} && ip.src=={videoflow[1]} && tcp.srcport=={videoflow[3]} && tls',
+                '-Y',
+                f'ip.dst=={videoflow[0]} && tcp.dstport=={videoflow[2]} && ip.src=={videoflow[1]} && tcp.srcport=={videoflow[3]} && tls',
                 '-T', 'fields',
                 '-e', 'tls.record.length'
             ]
@@ -106,9 +107,17 @@ class Traffic:
                 f.write(f'{self.url},{videoflow[0]}:{videoflow[2]}-{videoflow[1]}:{videoflow[3]},{chunsize_str}\n')
 
 
+def batch_get_chunk():
+    conf = configparser.ConfigParser()
+    conf.read('src/config.conf', encoding='UTF-8')
+    pcap_path = conf.get('capture', 'pcap_path')
+    pcaps = os.listdir(pcap_path)
+    for pcap in pcaps:
+        traffic = Traffic(pcap_path + pcap)
+        traffic.get_videoflows()
+        traffic.clean_flows()
+        traffic.get_tls_downlink_flows()
+
+
 if __name__ == '__main__':
-    pcap = 'data/test.pcap'
-    traffic = Traffic(pcap)
-    traffic.get_videoflows()
-    traffic.clean_flows()
-    traffic.get_tls_downlink_flows()
+    batch_get_chunk()
