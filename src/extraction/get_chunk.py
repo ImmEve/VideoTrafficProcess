@@ -11,7 +11,9 @@ class Traffic:
         conf.read('src/config.conf', encoding='UTF-8')
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.fingerpath = conf.get('get_chunk', 'fingerpath')
+        os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
         self.pcap = pcap
+        self.time = pcap.split(' ')[-1].split('.')[0]
         self.url = 'https://www.youtube.com//watch?v=' + self.pcap.split('/')[-1].split(' ')[0]
 
     def get_videoflows(self):
@@ -39,10 +41,7 @@ class Traffic:
                                 except dpkt.dpkt.NeedData:
                                     continue
                                 hex_data = ssl.hex()
-                                str_data = ''.join(
-                                    chr(int(hex_data[i:i + 2], 16)) if 32 <= int(hex_data[i:i + 2], 16) <= 126 else ' '
-                                    for i in
-                                    range(0, len(hex_data), 2))
+                                str_data = ''.join(chr(int(hex_data[i:i + 2], 16)) if 32 <= int(hex_data[i:i + 2], 16) <= 126 else ' ' for i in range(0, len(hex_data), 2))
                                 if 'googlevideo.com' in str_data:
                                     self.videoflows[(src_ip, dst_ip, src_port, dst_port)] = [packet]
 
@@ -60,7 +59,7 @@ class Traffic:
     def get_tls_downlink_flows(self):
         if not os.path.exists(self.fingerpath):
             with open(self.fingerpath, 'a') as f:
-                f.write('url,flow,chunk\n')
+                f.write('url,time,flow,chunk\n')
         videoflows_list = self.videoflows.keys()
         for videoflow in videoflows_list:
             tsharkCall = [
@@ -104,7 +103,7 @@ class Traffic:
                 chunksize.append(sum([sum(record[1:]) for record in chunk]))
             chunsize_str = '/'.join([str(i) for i in chunksize if i > 1000])
             with open(self.fingerpath, 'a') as f:
-                f.write(f'{self.url},{videoflow[0]}:{videoflow[2]}-{videoflow[1]}:{videoflow[3]},{chunsize_str}\n')
+                f.write(f'{self.url},{self.time},{videoflow[0]}:{videoflow[2]}-{videoflow[1]}:{videoflow[3]},{chunsize_str}\n')
 
 
 def batch_get_chunk():
