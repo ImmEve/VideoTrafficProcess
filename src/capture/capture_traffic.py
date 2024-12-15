@@ -11,6 +11,7 @@ class Capture():
     def __init__(self):
         conf = configparser.ConfigParser()
         conf.read('src/config.conf', encoding='UTF-8')
+        self.capture_responsebody_path = 'src/capture/capture_responsebody.py'
         self.pcap_path = conf.get('capture', 'pcap_path')
         os.makedirs(self.pcap_path, exist_ok=True)
         self.responsebody_path = conf.get('capture', 'responsebody_path')
@@ -77,8 +78,8 @@ class Capture():
             tsharkOut = open(pcap_filepath, 'wb')
             tsharkCall = [self.tshark_path, '-F', 'pcap', '-i', self.tshark_interface, '-w', pcap_filepath]
             tsharkProc = subprocess.Popen(tsharkCall, stdout=tsharkOut, executable=self.tshark_path)
-            # mitmCall = [self.mitmdump_path, '-s', 'capture_responsebody.py', '--mode', 'upstream:http://127.0.0.1:7890']
-            mitmCall = [self.mitmdump_path, '-s', 'src/capture_responsebody.py']
+            # mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path, '--mode', 'upstream:http://127.0.0.1:7890']
+            mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path]
             mitmProc = subprocess.Popen(mitmCall, executable=self.mitmdump_path)
             time.sleep(10)
 
@@ -104,7 +105,7 @@ class Capture():
         csv_data = csv_file.read()
         video_urls = csv_data.split('\n')
 
-        for i in range(9, len(video_urls)):
+        for i in range(0, len(video_urls)):
             try:
                 self.capture_traffic(video_urls[i], turn)
             except:
@@ -150,16 +151,25 @@ class Capture():
             for url in urllist:
                 f.write(url[:44] + '\n')
 
+    def clean_response(self):
+        dir_response = os.listdir(self.responsebody_path)
+        for file in dir_response:
+            filename = file.split('.')[0]
+            if not os.path.exists(f'{self.pcap_path}{filename}.pcap'):
+                print(f'{self.responsebody_path}{file}')
+                os.remove(f'{self.responsebody_path}{file}')
+
 
 if __name__ == '__main__':
     capture = Capture()
     # capture.clawer_url()
     # capture.batch_check()
+    # capture.clean_response()
+
     # 更改端口
     p = ProxySetting()
     p.enable = True
     p.server = '127.0.0.1:8080'
     p.registry_write()
-    capture.capture_traffic('https://www.youtube.com/watch?v=99dJi-OTH-o', 1)
-    capture.capture_traffic('https://www.youtube.com/watch?v=A5r3ishNb3M', 3)
+
     capture.batch_capture(10)
