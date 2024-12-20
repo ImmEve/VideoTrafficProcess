@@ -232,6 +232,7 @@ class Video():
         for itag in self.itag_list:
             start, end = self.itag_indexrange[itag]['start'], self.itag_indexrange[itag]['end']
             videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
+            # videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{itag}.{self.itag_filetype[itag]}'
             try:
                 box = Box(self.itag_filetype[itag], start, end, videopath)
             except:
@@ -300,14 +301,20 @@ def batch_download():
 
 
 def batch_analyze():
+    if_ues_url_list = int(conf.get('get_segment', 'if_ues_url_list'))
     url_list_path = conf.get('capture', 'url_list_path')
-    fingerpath = conf.get('get_segment', 'fingerpath')
+    if if_ues_url_list:     
+        with open(url_list_path, 'r') as f:
+            reader = csv.reader(f)
+            txt = list(reader)
+        urls = [i[0] for i in txt]
+    else:
+        datapath = conf.get('get_segment', 'datapath')
+        files = os.listdir(datapath + 'videoheader')
+        urls = ['https://www.youtube.com//watch?v=' + i for i in files]
 
-    with open(url_list_path, 'r') as f:
-        reader = csv.reader(f)
-        txt = list(reader)
-    url_list = [i[0] for i in txt]
-    for url in url_list:
+    fingerpath = conf.get('get_segment', 'fingerpath')
+    for url in urls:
         video = Video(url)
         video.analyse_websource()
         video.analyse_video()
