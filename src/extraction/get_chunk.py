@@ -4,13 +4,14 @@ import socket
 import subprocess
 import dpkt
 
+conf = configparser.ConfigParser()
+conf.read('config.conf', encoding='UTF-8')
+workdir = conf.get('global', 'workdir')
 
 class Traffic:
     def __init__(self, pcap):
-        conf = configparser.ConfigParser()
-        conf.read('src/config.conf', encoding='UTF-8')
         self.tshark_path = conf.get('capture', 'tshark_path')
-        self.fingerpath = conf.get('get_chunk', 'fingerpath')
+        self.fingerpath = workdir + conf.get('get_chunk', 'fingerpath')
         os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
         self.pcap = pcap
         self.time = pcap.split(' ')[-1].split('.')[0]
@@ -107,9 +108,7 @@ class Traffic:
 
 
 def batch_get_chunk():
-    conf = configparser.ConfigParser()
-    conf.read('src/config.conf', encoding='UTF-8')
-    pcap_path = conf.get('capture', 'pcap_path')
+    pcap_path = workdir + conf.get('capture', 'pcap_path')
     pcaps = os.listdir(pcap_path)
     for pcap in pcaps:
         traffic = Traffic(pcap_path + pcap)

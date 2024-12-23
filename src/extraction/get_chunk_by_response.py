@@ -2,9 +2,10 @@ import configparser
 import os
 
 conf = configparser.ConfigParser()
-conf.read('src/config.conf', encoding='UTF-8')
-responsebody_path = conf.get('capture', 'responsebody_path')
-fingerpath = conf.get('get_chunk', 'fingerpath')
+conf.read('config.conf', encoding='UTF-8')
+workdir = conf.get('global', 'workdir')
+responsebody_path = workdir + conf.get('capture', 'responsebody_path')
+fingerpath = workdir + conf.get('get_chunk', 'fingerpath')
 if not os.path.exists(fingerpath):
     with open(fingerpath, 'a') as f:
         f.write('url,time,chunk\n')

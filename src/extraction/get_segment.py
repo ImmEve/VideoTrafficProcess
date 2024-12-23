@@ -12,8 +12,8 @@ import requests
 from bs4 import BeautifulSoup
 
 conf = configparser.ConfigParser()
-conf.read('src/config.conf', encoding='UTF-8')
-
+conf.read('config.conf', encoding='UTF-8')
+workdir = conf.get('global', 'workdir')
 
 class Reference():
     def __init__(self, Reference_Type, Reference_Size, Subsegment_Duration, Starts_with_SAP, SAP_Type):
@@ -134,13 +134,13 @@ class Box():
 
 class Video():
     def __init__(self, url):
-        self.datapath = conf.get('get_segment', 'datapath')
+        self.datapath = workdir + conf.get('get_segment', 'datapath')
         os.makedirs(self.datapath, exist_ok=True)
         os.makedirs(f'{self.datapath}websource', exist_ok=True)
         os.makedirs(f'{self.datapath}videoheader', exist_ok=True)
-        self.fingerpath = conf.get('get_segment', 'fingerpath')
+        self.fingerpath = workdir + conf.get('get_segment', 'fingerpath')
         os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
-        self.errorlog = conf.get('capture', 'errorlog')
+        self.errorlog = workdir + conf.get('capture', 'errorlog')
         self.url = url
         self.video_name = self.url.split('=')[1]
         self.video_mp4_itag = ['136', '398']
@@ -262,9 +262,9 @@ class Video():
 
 
 def batch_download():
-    url_list_path = conf.get('capture', 'url_list_path')
-    datapath = conf.get('get_segment', 'datapath')
-    errorlog = conf.get('capture', 'errorlog')
+    url_list_path = workdir + conf.get('capture', 'url_list_path')
+    datapath = workdir + conf.get('get_segment', 'datapath')
+    errorlog = workdir + conf.get('capture', 'errorlog')
 
     with open(url_list_path, 'r') as f:
         reader = csv.reader(f)
@@ -302,18 +302,18 @@ def batch_download():
 
 def batch_analyze():
     if_ues_url_list = int(conf.get('get_segment', 'if_ues_url_list'))
-    url_list_path = conf.get('capture', 'url_list_path')
+    url_list_path = workdir + conf.get('capture', 'url_list_path')
     if if_ues_url_list:     
         with open(url_list_path, 'r') as f:
             reader = csv.reader(f)
             txt = list(reader)
         urls = [i[0] for i in txt]
     else:
-        datapath = conf.get('get_segment', 'datapath')
+        datapath = workdir + conf.get('get_segment', 'datapath')
         files = os.listdir(datapath + 'videoheader')
         urls = ['https://www.youtube.com//watch?v=' + i for i in files]
 
-    fingerpath = conf.get('get_segment', 'fingerpath')
+    fingerpath = workdir + conf.get('get_segment', 'fingerpath')
     for url in urls:
         video = Video(url)
         video.analyse_websource()

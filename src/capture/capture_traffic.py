@@ -10,14 +10,15 @@ from webdriver import Webdriver
 class Capture():
     def __init__(self):
         conf = configparser.ConfigParser()
-        conf.read('src/config.conf', encoding='UTF-8')
-        self.capture_responsebody_path = 'src/capture/capture_responsebody.py'
-        self.pcap_path = conf.get('capture', 'pcap_path')
+        conf.read('config.conf', encoding='UTF-8')
+        self.workdir = conf.get('global', 'workdir')
+        self.capture_responsebody_path = self.workdir + 'src/capture/capture_responsebody.py'
+        self.pcap_path = self.workdir + conf.get('capture', 'pcap_path')
         os.makedirs(self.pcap_path, exist_ok=True)
-        self.responsebody_path = conf.get('capture', 'responsebody_path')
+        self.responsebody_path = self.workdir + conf.get('capture', 'responsebody_path')
         os.makedirs(self.responsebody_path, exist_ok=True)
-        self.url_list_path = conf.get('capture', 'url_list_path')
-        self.url_class_path = conf.get('capture', 'url_class_path')
+        self.url_list_path = self.workdir + conf.get('capture', 'url_list_path')
+        self.url_class_path = self.workdir + conf.get('capture', 'url_class_path')
         self.tshark_interface = conf.get('capture', 'tshark_interface')
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.mitmdump_path = conf.get('capture', 'mitmdump_path')

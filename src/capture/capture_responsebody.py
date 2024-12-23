@@ -5,8 +5,9 @@ from mitmproxy import http
 class Mitm:
     def __init__(self):
         conf = configparser.ConfigParser()
-        conf.read('src/config.conf', encoding='UTF-8')
-        self.responsebody_filepath = conf.get('capture', 'responsebody_path') + 'log.csv'
+        conf.read('config.conf', encoding='UTF-8')
+        self.workdir = conf.get('global', 'workdir')
+        self.responsebody_filepath = self.workdir + conf.get('capture', 'responsebody_path') + 'log.csv'
 
     def response(self, flow: http.HTTPFlow) -> None:
         if 'videoplayback' in flow.request.pretty_url:

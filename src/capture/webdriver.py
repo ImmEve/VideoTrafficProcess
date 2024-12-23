@@ -10,10 +10,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 class Webdriver():
     def __init__(self):
         conf = configparser.ConfigParser()
-        conf.read('src/config.conf', encoding='UTF-8')
-        self.chrome_driver_path = conf.get('capture', 'chrome_driver_path')
+        conf.read('config.conf', encoding='UTF-8')
+        self.workdir = conf.get('global', 'workdir')
+        self.chrome_driver_path = self.workdir + conf.get('capture', 'chrome_driver_path')
         self.chrome_user_data_path = conf.get('capture', 'chrome_user_data_path')
-        self.errorlog = conf.get('capture', 'errorlog')
+        self.errorlog = self.workdir + conf.get('capture', 'errorlog')
         self.loop_count = 10
 
     # 初始化chrom driver
