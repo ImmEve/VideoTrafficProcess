@@ -228,7 +228,6 @@ class Video():
                     f.write(f'{self.video_name}: download video {itag} error\n')
 
     def analyse_video(self):
-        self.itag_box = {}
         for itag in self.itag_list:
             start, end = self.itag_indexrange[itag]['start'], self.itag_indexrange[itag]['end']
             videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
@@ -236,30 +235,72 @@ class Video():
             try:
                 box = Box(self.itag_filetype[itag], start, end, videopath)
             except:
-                box = None
-            self.itag_box[itag] = box
+                continue
 
-            if box is not None:
-                if not os.path.exists(self.fingerpath):
-                    with open(self.fingerpath, 'a') as f:
-                        f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
+            if not os.path.exists(self.fingerpath):
                 with open(self.fingerpath, 'a') as f:
-                    vid = self.video_name
-                    f.write(
-                        f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
-                    if box.filetype == 'mp4':
-                        seg_list = box.reference_list
-                        dura_list = [1000 * x // box.Timescale for x in box.duration_list]
-                        time_list = [0] + list(accumulate(dura_list))
-                    elif box.filetype == 'webm':
-                        seg_list = box.track_list
-                        time_list = box.timeline
-                    f.write(str(len(seg_list)) + ',')
-                    seg_str = '/'.join([str(seg) for seg in seg_list])
-                    f.write(seg_str + ',')
-                    time_str = '/'.join([str(tim) for tim in time_list])
-                    f.write(time_str + '\n')
+                    f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
+            with open(self.fingerpath, 'a') as f:
+                vid = self.video_name
+                f.write(
+                    f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
+                if box.filetype == 'mp4':
+                    seg_list = box.reference_list[:-1]
+                    dura_list = [1000 * x // box.Timescale for x in box.duration_list[:-1]]
+                    time_list = [0] + list(accumulate(dura_list[:-1]))
+                elif box.filetype == 'webm':
+                    seg_list = box.track_list
+                    time_list = box.timeline[:-1]
+                f.write(str(len(seg_list)) + ',')
+                seg_str = '/'.join([str(seg) for seg in seg_list])
+                f.write(seg_str + ',')
+                time_str = '/'.join([str(tim) for tim in time_list])
+                f.write(time_str + '\n')
 
+    def conbine_video(self):
+        video_itags = list(set(self.itag_list) & set(self.video_mp4_itag + self.video_webm_itag))
+        audio_itags = list(set(self.itag_list) & set(self.audio_mp4_itag + self.audio_webm_itag))
+        for video_itag in video_itags:
+            for audio_itag in audio_itags:
+                video_start, video_end = self.itag_indexrange[video_itag]['start'], self.itag_indexrange[video_itag]['end']
+                audio_start, audio_end = self.itag_indexrange[audio_itag]['start'], self.itag_indexrange[audio_itag]['end']
+                videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[video_itag]}_{video_itag}.{self.itag_filetype[video_itag]}'
+                audiopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[audio_itag]}_{audio_itag}.{self.itag_filetype[audio_itag]}'
+                try:
+                    video_box = Box(self.itag_filetype[video_itag], video_start, video_end, videopath)
+                    audio_box = Box(self.itag_filetype[audio_itag], audio_start, audio_end, audiopath)
+                except:
+                    continue
+
+                if not os.path.exists(self.fingerpath.split('.')[0] + '_combine.csv'):
+                    with open(self.fingerpath.split('.')[0] + '_combine.csv', 'a') as f:
+                        f.write('vid,itag,contentlength,seg_num,seg_list\n')
+                with open(self.fingerpath.split('.')[0] + '_combine.csv', 'a') as f:
+                    vid = self.video_name
+                    f.write(f'{vid},{video_itag}/{audio_itag},{str(self.itag_contentlength[video_itag] + self.itag_contentlength[audio_itag])},')
+                    if video_box.filetype == 'mp4':
+                        video_seg_list = video_box.reference_list[:-1]
+                        video_dura_list = [1000 * x // video_box.Timescale for x in video_box.duration_list[:-1]]
+                        video_time_list = [0] + list(accumulate(video_dura_list[:-1]))
+                    elif video_box.filetype == 'webm':
+                        video_seg_list = video_box.track_list
+                        video_time_list = video_box.timeline[:-1]
+                    if audio_box.filetype == 'mp4':
+                        audio_seg_list = audio_box.reference_list[:-1]
+                        audio_dura_list = [1000 * x // audio_box.Timescale for x in audio_box.duration_list[:-1]]
+                        audio_time_list = [0] + list(accumulate(audio_dura_list[:-1]))
+                    elif audio_box.filetype == 'webm':
+                        audio_seg_list = audio_box.track_list
+                        audio_time_list = audio_box.timeline[:-1]
+                    video_time_list[0] = 1
+                    f.write(str(len(video_seg_list) + len(audio_seg_list)) + ',')
+                    com_dict = dict(zip(video_time_list + audio_time_list, video_seg_list + audio_seg_list))
+                    com_time = list(com_dict.keys())
+                    com_time.sort()
+                    com_seg = [str(com_dict[i]) for i in com_time]
+                    seg_str = '/'.join([str(seg) for seg in com_seg])
+                    f.write(seg_str + '\n')
+                
 
 def batch_download():
     url_list_path = workdir + conf.get('capture', 'url_list_path')
@@ -318,6 +359,7 @@ def batch_analyze():
         video = Video(url)
         video.analyse_websource()
         video.analyse_video()
+        video.conbine_video()
 
     with open(fingerpath, 'r') as f:
         reader = csv.reader(f)
