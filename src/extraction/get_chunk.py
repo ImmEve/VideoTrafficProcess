@@ -15,7 +15,7 @@ class Traffic:
         os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
         self.pcap = pcap
         self.time = pcap.split(' ')[-1].split('.')[0]
-        self.url = 'https://www.youtube.com//watch?v=' + self.pcap.split('/')[-1].split(' ')[0]
+        self.vid = self.pcap.split('/')[-1].split(' ')[0]
 
     def get_videoflows(self):
         self.videoflows = {}
@@ -60,7 +60,7 @@ class Traffic:
     def get_tls_downlink_flows(self):
         if not os.path.exists(self.fingerpath):
             with open(self.fingerpath, 'a') as f:
-                f.write('url,time,flow,chunk\n')
+                f.write('vid,time,flow,chunk\n')
         videoflows_list = self.videoflows.keys()
         for videoflow in videoflows_list:
             tsharkCall = [
@@ -104,7 +104,7 @@ class Traffic:
                 chunksize.append(sum([sum(record[1:]) for record in chunk]))
             chunsize_str = '/'.join([str(i) for i in chunksize if i > 1000])
             with open(self.fingerpath, 'a') as f:
-                f.write(f'{self.url},{self.time},{videoflow[0]}:{videoflow[2]}-{videoflow[1]}:{videoflow[3]},{chunsize_str}\n')
+                f.write(f'{self.vid},{self.time},{videoflow[0]}:{videoflow[2]}-{videoflow[1]}:{videoflow[3]},{chunsize_str}\n')
 
 
 def batch_get_chunk():

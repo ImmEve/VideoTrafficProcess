@@ -242,11 +242,11 @@ class Video():
             if box is not None:
                 if not os.path.exists(self.fingerpath):
                     with open(self.fingerpath, 'a') as f:
-                        f.write('url,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
+                        f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
                 with open(self.fingerpath, 'a') as f:
-                    url = 'https://www.youtube.com//watch?v=' + self.video_name
+                    vid = self.video_name
                     f.write(
-                        f'{url},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
+                        f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
                     if box.filetype == 'mp4':
                         seg_list = box.reference_list
                         dura_list = [1000 * x // box.Timescale for x in box.duration_list]
