@@ -3,6 +3,7 @@ import os
 import socket
 import subprocess
 import dpkt
+import time
 
 conf = configparser.ConfigParser()
 conf.read('config.conf', encoding='UTF-8')
@@ -109,6 +110,8 @@ class Traffic:
 
 def batch_get_chunk():
     pcap_path = workdir + conf.get('capture', 'pcap_path')
+    t_time = time.strftime('%Y_%m_%d_%H_%M')
+    pcap_path = f'{pcap_path.split(".")[0]}_{t_time}.csv'
     pcaps = os.listdir(pcap_path)
     for pcap in pcaps:
         traffic = Traffic(pcap_path + pcap)

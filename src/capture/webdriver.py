@@ -5,6 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 
 
 class Webdriver():
@@ -81,18 +82,20 @@ class Webdriver():
             try:
                 time.sleep(3)
                 # 点击设置
-                self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
+                # self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
+                self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]').click()
                 # 点击画质
-                self.driver.find_element(By.XPATH,
-                                         '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menu-label-secondary"]').click()
+                # self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menu-label-secondary"]').click()
+                self.driver.find_element(By.XPATH,'//*[@id="ytp-id-18"]//*[@class="ytp-menu-label-secondary"]').click()
                 time.sleep(3)
                 # 获取分辨率信息
                 html = self.driver.page_source.encode('utf-8', 'ignore')
                 parseHtml = etree.HTML(html)
-                video_resolution = parseHtml.xpath(
-                    '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menuitem-label"]/div/span/text()')
+                # video_resolution = parseHtml.xpath('//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menuitem-label"]/div/span/text()')
+                video_resolution = parseHtml.xpath('//*[@id="ytp-id-18"]//*[@class="ytp-menuitem-label"]/div/span/text()')
                 # 复原
-                self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
+                # self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
+                self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]').click()
                 print(f'video_resolution: {video_resolution}')
                 return video_resolution
             except:
@@ -100,6 +103,49 @@ class Webdriver():
         print(f'{video_url}: resolution error')
         with open(self.errorlog, 'a') as f:
             f.write(f'{video_url}: resolution error\n')
+        return 0
+    
+    def get_itag(self, video_url):
+        for i in range(0, self.loop_count):
+            try:
+                time.sleep(3)
+                element = self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]')
+                ActionChains(self.driver).context_click(element).perform()
+                self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-contextmenu"]//*[@class="ytp-menuitem-label" and text()="详细统计信息"]').click()
+                videoinfo = self.driver.find_element(By.XPATH, '//*[@class="html5-video-info-panel ytp-sfn"]//*[@class="html5-video-info-panel-content ytp-sfn-content"]').text
+                codecs = videoinfo.split('\nCodecs ')[1].split('\nColor ')[0]
+                video_itag = codecs.split('(')[1].split(')')[0]
+                audio_itag = codecs.split('(')[2].split(')')[0]
+                print(f'itag: {video_itag} / {audio_itag}')
+                return video_itag, audio_itag
+            except:
+                pass
+        print(f'{video_url}: itag error')
+        with open(self.errorlog, 'a') as f:
+            f.write(f'{video_url}: itag error\n')
+        return 0
+    
+    # 修改视频分辨率
+    def change_video_resolution(self, video_url, resolution):
+        for i in range(0, self.loop_count):
+            try:
+                time.sleep(3)
+                # 点击设置
+                # self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
+                self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]').click()
+                # 点击画质
+                # self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menu-label-secondary"]').click()
+                self.driver.find_element(By.XPATH,'//*[@id="ytp-id-18"]//*[@class="ytp-menu-label-secondary"]').click()
+                time.sleep(1)
+                # 选择最高分辨率
+                # self.driver.find_element(By.XPATH, f'//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menuitem-label"]/div/span[text()="{resolution}"]').click()
+                self.driver.find_element(By.XPATH, f'//*[@id="ytp-id-18"]//*[@class="ytp-menuitem-label"]/div/span[text()="{resolution}"]').click()
+                return 1
+            except:
+                pass
+        print(f'{video_url}: resolution change error')
+        with open(self.errorlog, 'a') as f:
+            f.write(f'{video_url}: resolution change error\n')
         return 0
 
     def get_urllist(self):

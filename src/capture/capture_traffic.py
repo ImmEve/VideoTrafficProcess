@@ -23,7 +23,9 @@ class Capture():
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.mitmdump_path = conf.get('capture', 'mitmdump_path')
         self.time_duration = int(conf.get('capture', 'time_duration'))
-        self.check_resolution = ['720p']
+        self.check_resolution = conf.get('capture', 'check_resolution').split(',')
+        self.if_auto_playback = int(conf.get('capture', 'if_auto_playback'))
+        self.chose_resolution = conf.get('capture', 'chose_resolution')
         self.webdriver = Webdriver()
 
     # 检查视频信息
@@ -54,7 +56,7 @@ class Capture():
             self.webdriver.driver.close()
             return 0
         # 检查分辨率
-        if (set(self.check_resolution) & set(video_resolution)) == set():
+        if not (set(video_resolution) >= set(self.check_resolution)):
             print(f'{video_url}: resolution not include')
             with open(self.webdriver.errorlog, 'a') as f:
                 f.write(f'{video_url}: resolution not include\n')
@@ -69,15 +71,11 @@ class Capture():
             # 新建文件
             t_time = time.strftime('%Y_%m_%d_%H_%M')
             video_name = video_url.split('=')[-1]
-            pcap_filename = f'{video_name} TLS {self.check_resolution[0]} {str(self.time_duration)}s {t_time}.pcap'
-            responsebody_filename = f'{video_name} TLS {self.check_resolution[0]} {str(self.time_duration)}s {t_time}.csv'
-            pcap_filepath = self.pcap_path + pcap_filename
-            responsebody_filepath = self.responsebody_path + responsebody_filename
 
             # 开始记录网络流量
             print('start capturing...')
-            tsharkOut = open(pcap_filepath, 'wb')
-            tsharkCall = [self.tshark_path, '-F', 'pcap', '-i', self.tshark_interface, '-w', pcap_filepath]
+            tsharkOut = open(self.pcap_path + 'log.pcap', 'wb')
+            tsharkCall = [self.tshark_path, '-F', 'pcap', '-i', self.tshark_interface, '-w', self.pcap_path + 'log.pcap']
             tsharkProc = subprocess.Popen(tsharkCall, stdout=tsharkOut, executable=self.tshark_path)
             # mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path, '--mode', 'upstream:http://127.0.0.1:7890']
             mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path]
@@ -86,19 +84,30 @@ class Capture():
 
             # 播放视频
             self.webdriver.loop_get_url(video_url)
+            # 切换分辨率
+            if self.if_auto_playback == 0:
+                self.webdriver.change_video_resolution(video_url, self.chose_resolution)
+            video_itag, audio_itag = self.webdriver.get_itag(video_url)
             time.sleep(self.time_duration + 10)
             # 结束流量采集
             tsharkProc.kill()
             mitmProc.kill()
+            tsharkOut.close()
+            # 关闭视频
+            self.webdriver.driver.close()
+            time.sleep(10)
+
+            responsebody_filename = f'{video_name} {video_itag}_{audio_itag} {str(self.time_duration)}s TLS {t_time}.csv'
+            responsebody_filepath = self.responsebody_path + responsebody_filename
+            pcap_filename = f'{video_name} {video_itag}_{audio_itag} {str(self.time_duration)}s TLS {t_time}.pcap'
+            pcap_filepath = self.pcap_path + pcap_filename
             try:
                 os.rename(self.responsebody_path + 'log.csv', responsebody_filepath)
+                os.rename(self.pcap_path + 'log.pcap', pcap_filepath)
             except:
                 print(f'{video_url}: log error')
                 with open(self.webdriver.errorlog, 'a') as f:
                     f.write(f'{video_url}: log error\n')
-            # 关闭视频
-            self.webdriver.driver.close()
-            time.sleep(10)
 
     # 批量采集
     def batch_capture(self, turn):
@@ -126,7 +135,7 @@ class Capture():
                 if self.check_video_info(video_urls[i]) == 1:
                     with open(f'{self.url_list_path.split(".")[0]}_check_{t_time}.csv', 'a') as f:
                         f.write(video_urls[i] + '\n')
-            except:
+            except Exception as e:
                 print(f'{video_urls[i]}: check error')
                 with open(self.webdriver.errorlog, 'a') as f:
                     f.write(f'{video_urls[i]}: check error\n')
@@ -168,9 +177,11 @@ if __name__ == '__main__':
     # capture.clean_response()
 
     # 更改端口
-    p = ProxySetting()
-    p.enable = True
-    p.server = '127.0.0.1:8080'
-    p.registry_write()
+    # p = ProxySetting()
+    # p.enable = True
+    # p.server = '127.0.0.1:8080'
+    # p.registry_write()
 
-    capture.batch_capture(10)
+    # capture.batch_capture(1)
+    # capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
+    # print(capture.check_video_info('https://www.youtube.com/watch?v=06D_ckhFa88'))
