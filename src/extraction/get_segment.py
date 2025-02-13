@@ -139,6 +139,8 @@ class Video():
         os.makedirs(f'{self.datapath}websource', exist_ok=True)
         os.makedirs(f'{self.datapath}videoheader', exist_ok=True)
         self.fingerpath = workdir + conf.get('get_segment', 'fingerpath')
+        t_time = time.strftime('%Y_%m_%d_%H_%M')
+        self.fingerpath = f'{self.fingerpath.split(".")[0]}_{t_time}.csv'
         os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
         self.errorlog = workdir + conf.get('capture', 'errorlog')
         self.url = url
@@ -372,7 +374,10 @@ def batch_analyze():
 
 if __name__ == '__main__':
     # batch_download()
-    batch_analyze()
-    # video = Video('https://www.youtube.com//watch?v=h_aTFzQv4co')
-    # video.analyse_websource()
+    # batch_analyze()
+    video = Video('https://www.youtube.com//watch?v=-6H86cOjtSU')
+    video.get_websource()
+    video.analyse_websource()
+    video.download_video()
     # video.analyse_video()
+    video.conbine_video()

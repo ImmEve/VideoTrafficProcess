@@ -45,6 +45,15 @@ class Webdriver():
         with open(self.errorlog, 'a') as f:
             f.write(f'{video_url}: playback error\n')
         return 0
+    
+    # 安全关闭浏览器
+    def safe_close_driver(self):
+        try:
+            self.driver.close()
+        except Exception as e:
+            print(f'Error closing driver: {e}')
+        finally:
+            self.driver.quit()
 
     # 获取视频时长
     def get_video_duration(self, video_url):
@@ -163,3 +172,7 @@ class Webdriver():
             if str(url).__contains__('watch'):
                 video_urls.append("https://www.youtube.com/" + str(url))
         return video_urls
+
+if __name__ == '__main__':
+    wd = Webdriver()
+    
