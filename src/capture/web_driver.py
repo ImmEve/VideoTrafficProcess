@@ -16,7 +16,11 @@ class Webdriver():
         self.chrome_driver_path = self.workdir + conf.get('capture', 'chrome_driver_path')
         self.chrome_user_data_path = conf.get('capture', 'chrome_user_data_path')
         self.errorlog = self.workdir + conf.get('capture', 'errorlog')
-        self.loop_count = 10
+        self.loop_count = 5
+        self.driver = self.chrome_driver_init()
+
+    def __del__(self):
+        self.driver.close()
 
     # 初始化chrom driver
     def chrome_driver_init(self):
@@ -32,7 +36,6 @@ class Webdriver():
 
     # 持续访问URL直到成功
     def loop_get_url(self, video_url):
-        self.driver = self.chrome_driver_init()
         for i in range(0, self.loop_count):
             try:
                 time.sleep(3)
@@ -45,15 +48,6 @@ class Webdriver():
         with open(self.errorlog, 'a') as f:
             f.write(f'{video_url}: playback error\n')
         return 0
-    
-    # 安全关闭浏览器
-    def safe_close_driver(self):
-        try:
-            self.driver.close()
-        except Exception as e:
-            print(f'Error closing driver: {e}')
-        finally:
-            self.driver.quit()
 
     # 获取视频时长
     def get_video_duration(self, video_url):
@@ -121,6 +115,7 @@ class Webdriver():
                 element = self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]')
                 ActionChains(self.driver).context_click(element).perform()
                 self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-contextmenu"]//*[@class="ytp-menuitem-label" and text()="详细统计信息"]').click()
+                time.sleep(1)
                 videoinfo = self.driver.find_element(By.XPATH, '//*[@class="html5-video-info-panel ytp-sfn"]//*[@class="html5-video-info-panel-content ytp-sfn-content"]').text
                 codecs = videoinfo.split('\nCodecs ')[1].split('\nColor ')[0]
                 video_itag = codecs.split('(')[1].split(')')[0]
@@ -132,7 +127,7 @@ class Webdriver():
         print(f'{video_url}: itag error')
         with open(self.errorlog, 'a') as f:
             f.write(f'{video_url}: itag error\n')
-        return 0
+        return 0, 0
     
     # 修改视频分辨率
     def change_video_resolution(self, video_url, resolution):

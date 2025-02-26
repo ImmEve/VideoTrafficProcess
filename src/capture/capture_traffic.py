@@ -33,54 +33,66 @@ class Capture():
         print('start checking...')
         # 打开视频
         if self.wd.loop_get_url(video_url) == 0:
-            self.wd.safe_close_driver()
             return 0
         time.sleep(10)
         # 获取视频时长
         video_duration = self.wd.get_video_duration(video_url)
         if video_duration == 0:
-            self.wd.safe_close_driver()
             return 0
         # 获取视频时长（秒）
         duration_of_the_video = self.wd.get_video_duration_second(video_duration)
         # 获取视频分辨率信息
         video_resolution = self.wd.get_video_resolution(video_url)
         if video_resolution == 0:
-            self.wd.safe_close_driver()
             return 0
         # 检查视频时长
         if duration_of_the_video < self.time_duration:
             print(f'{video_url}: duration too short')
             with open(self.wd.errorlog, 'a') as f:
                 f.write(f'{video_url}: duration too short\n')
-            self.wd.safe_close_driver()
             return 0
         # 检查分辨率
         if not (set(video_resolution) >= set(self.check_resolution)):
             print(f'{video_url}: resolution not include')
             with open(self.wd.errorlog, 'a') as f:
                 f.write(f'{video_url}: resolution not include\n')
-            self.wd.safe_close_driver()
             return 0
-        self.wd.safe_close_driver()
         return 1
+
+    # 开始记录网络流量
+    def begin_tshark_mitm(self):
+        print('start tshark and mitm...')
+        tsharkOut = open(self.pcap_path + 'log.pcap', 'wb')
+        tsharkCall = [self.tshark_path, '-F', 'pcap', '-i', self.tshark_interface, '-w', self.pcap_path + 'log.pcap']
+        tsharkProc = subprocess.Popen(tsharkCall, stdout=tsharkOut, executable=self.tshark_path)
+        # mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path, '--mode', 'upstream:http://127.0.0.1:7890']
+        mitmCall = [self.mitmdump_path, '-q', '-s', self.capture_responsebody_path]
+        mitmProc = subprocess.Popen(mitmCall, executable=self.mitmdump_path)
+        time.sleep(10)
+        return tsharkProc, mitmProc, tsharkOut
+
+    # 结束流量采集
+    def end_tshark_mitm(self, tsharkProc, mitmProc, tsharkOut):
+        tsharkProc.terminate()
+        mitmProc.terminate()
+        try:
+            tsharkProc.wait(timeout=3)
+            mitmProc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            tsharkProc.kill()
+            mitmProc.kill()
+            tsharkProc.wait()
+            mitmProc.wait()
+        tsharkOut.close()
+        time.sleep(3)
 
     # 采集视频流量并记录解密响应
     def capture_traffic(self, video_url, turn):
         for t in range(turn):
-            # 新建文件
-            t_time = time.strftime('%Y_%m_%d_%H_%M')
-            video_name = video_url.split('=')[-1]
-
             # 开始记录网络流量
-            print('start capturing...')
-            tsharkOut = open(self.pcap_path + 'log.pcap', 'wb')
-            tsharkCall = [self.tshark_path, '-F', 'pcap', '-i', self.tshark_interface, '-w', self.pcap_path + 'log.pcap']
-            tsharkProc = subprocess.Popen(tsharkCall, stdout=tsharkOut, executable=self.tshark_path)
-            # mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path, '--mode', 'upstream:http://127.0.0.1:7890']
-            mitmCall = [self.mitmdump_path, '-s', self.capture_responsebody_path]
-            mitmProc = subprocess.Popen(mitmCall, executable=self.mitmdump_path)
-            time.sleep(10)
+            self.wd.loop_get_url('about:blank')
+            time.sleep(3)
+            tsharkProc, mitmProc, tsharkOut = self.begin_tshark_mitm()
 
             # 播放视频
             self.wd.loop_get_url(video_url)
@@ -88,28 +100,51 @@ class Capture():
             if self.if_auto_playback == 0:
                 self.wd.change_video_resolution(video_url, self.chose_resolution)
             video_itag, audio_itag = self.wd.get_itag(video_url)
+            if video_itag == 0 and audio_itag == 0:
+                self.end_tshark_mitm(tsharkProc, mitmProc, tsharkOut)
+                if os.path.exists(self.responsebody_path + 'log.csv'):
+                    for _ in range(5):
+                        try:
+                            os.remove(self.responsebody_path + 'log.csv')
+                            break
+                        except PermissionError:
+                            time.sleep(3)
+                continue
             time.sleep(self.time_duration + 10)
-            # 结束流量采集
-            tsharkProc.kill()
-            mitmProc.kill()
-            tsharkOut.close()
-            time.sleep(10)
 
+            # 结束流量采集
+            self.end_tshark_mitm(tsharkProc, mitmProc, tsharkOut)
+
+            t_time = time.strftime('%Y_%m_%d_%H_%M')
+            video_name = video_url.split('=')[-1]
+            flag = -1
+            
+            # 更改解密响应文件名
             responsebody_filename = f'{video_name} {video_itag}_{audio_itag} {str(self.time_duration)}s TLS {t_time}.csv'
-            responsebody_filepath = self.responsebody_path + responsebody_filename
+            responsebody_filepath = self.responsebody_path + responsebody_filename        
+            for _ in range(5):
+                try:
+                    os.rename(self.responsebody_path + 'log.csv', responsebody_filepath)
+                    flag = flag + 1
+                    break
+                except PermissionError:
+                    time.sleep(3)
+
+            # 更改pcap文件名
             pcap_filename = f'{video_name} {video_itag}_{audio_itag} {str(self.time_duration)}s TLS {t_time}.pcap'
             pcap_filepath = self.pcap_path + pcap_filename
-            try:
-                os.rename(self.responsebody_path + 'log.csv', responsebody_filepath)
-                os.rename(self.pcap_path + 'log.pcap', pcap_filepath)
-            except Exception as e:
+            for _ in range(5):
+                try:
+                    os.rename(self.pcap_path + 'log.pcap', pcap_filepath)
+                    flag = flag + 1
+                    break
+                except PermissionError:
+                    time.sleep(3)
+
+            if flag != 1:
                 print(f'{video_url}: log error')
                 with open(self.wd.errorlog, 'a') as f:
                     f.write(f'{video_url}: log error\n')
-                    f.write(str(e) + '\n')
-
-            # 关闭视频
-            self.wd.safe_close_driver()
 
     # 批量采集
     def batch_capture(self, turn):
@@ -152,11 +187,9 @@ class Capture():
         for class_url in range(len(class_list)):
             # 打开视频
             if self.wd.loop_get_url(class_list[class_url][1]) == 0:
-                self.wd.safe_close_driver()
-                return 0
+                continue
             time.sleep(10)
             urls = self.wd.get_urllist()
-            self.wd.safe_close_driver()
             urllist = urllist + urls
         urllist = list(set(urllist))
         t_time = time.strftime('%Y_%m_%d_%H_%M')
@@ -208,11 +241,11 @@ if __name__ == '__main__':
     # capture.clean_response()
 
     # 更改端口
-    # p = ProxySetting()
-    # p.enable = True
-    # p.server = '127.0.0.1:8080'
-    # p.registry_write()
-    # capture.batch_capture(1)
+    p = ProxySetting()
+    p.enable = True
+    p.server = '127.0.0.1:8080'
+    p.registry_write()
+    capture.batch_capture(1)
 
     # capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
     # print(capture.check_video_info('https://www.youtube.com/watch?v=06D_ckhFa88'))
