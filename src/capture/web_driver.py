@@ -16,7 +16,7 @@ class Webdriver():
         self.chrome_driver_path = self.workdir + conf.get('capture', 'chrome_driver_path')
         self.chrome_user_data_path = conf.get('capture', 'chrome_user_data_path')
         self.errorlog = self.workdir + conf.get('capture', 'errorlog')
-        self.loop_count = 5
+        self.loop_count = 10
         self.driver = self.chrome_driver_init()
 
     def __del__(self):
@@ -47,6 +47,23 @@ class Webdriver():
         print(f'{video_url}: playback error')
         with open(self.errorlog, 'a') as f:
             f.write(f'{video_url}: playback error\n')
+        return 0
+    
+    # 点击播放
+    def play_video(self, video_url):
+        for i in range(0, self.loop_count):
+            try:
+                time.sleep(3)
+                play_button = self.driver.find_element(By.XPATH, '//button[@class="ytp-play-button ytp-button"]')
+                tooltip_text = play_button.get_attribute('data-title-no-tooltip')
+                if tooltip_text == '播放':
+                    play_button.click()
+                return 1
+            except:
+                pass
+        print(f'{video_url}: play video error')
+        with open(self.errorlog, 'a') as f:
+            f.write(f'{video_url}: play video error\n')
         return 0
 
     # 获取视频时长

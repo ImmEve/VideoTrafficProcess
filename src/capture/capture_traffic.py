@@ -96,6 +96,7 @@ class Capture():
 
             # 播放视频
             self.wd.loop_get_url(video_url)
+            self.wd.play_video(video_url)
             # 切换分辨率
             if self.if_auto_playback == 0:
                 self.wd.change_video_resolution(video_url, self.chose_resolution)
