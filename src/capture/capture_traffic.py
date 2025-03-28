@@ -6,19 +6,19 @@ import time
 from winproxy import ProxySetting
 from web_driver import Webdriver
 
+conf = configparser.ConfigParser()
+conf.read('config.conf', encoding='UTF-8')
+workdir = conf.get('global', 'workdir')
 
 class Capture():
     def __init__(self):
-        conf = configparser.ConfigParser()
-        conf.read('config.conf', encoding='UTF-8')
-        self.workdir = conf.get('global', 'workdir')
-        self.capture_responsebody_path = self.workdir + 'src/capture/capture_responsebody.py'
-        self.pcap_path = self.workdir + conf.get('capture', 'pcap_path')
+        self.capture_responsebody_path = workdir + 'src/capture/capture_responsebody.py'
+        self.pcap_path = workdir + conf.get('capture', 'pcap_path')
         os.makedirs(self.pcap_path, exist_ok=True)
-        self.responsebody_path = self.workdir + conf.get('capture', 'responsebody_path')
+        self.responsebody_path = workdir + conf.get('capture', 'responsebody_path')
         os.makedirs(self.responsebody_path, exist_ok=True)
-        self.url_list_path = self.workdir + conf.get('capture', 'url_list_path')
-        self.url_class_path = self.workdir + conf.get('capture', 'url_class_path')
+        self.url_list_path = workdir + conf.get('capture', 'url_list_path')
+        self.url_class_path = workdir + conf.get('capture', 'url_class_path')
         self.tshark_interface = conf.get('capture', 'tshark_interface')
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.mitmdump_path = conf.get('capture', 'mitmdump_path')
@@ -26,6 +26,8 @@ class Capture():
         self.check_resolution = conf.get('capture', 'check_resolution').split(',')
         self.if_auto_playback = int(conf.get('capture', 'if_auto_playback'))
         self.chose_resolution = conf.get('capture', 'chose_resolution')
+        self.reurl_path = workdir + conf.get('capture', 'reurl_path')
+        self.exurl_path = workdir + conf.get('capture', 'exurl_path')
         self.wd = Webdriver()
 
     # 检查视频信息
@@ -86,6 +88,17 @@ class Capture():
         tsharkOut.close()
         time.sleep(3)
 
+    # 提前退出流量采集
+    def drop_out(self, tsharkProc, mitmProc, tsharkOut):
+        self.end_tshark_mitm(tsharkProc, mitmProc, tsharkOut)
+        if os.path.exists(self.responsebody_path + 'log.csv'):
+            for _ in range(5):
+                try:
+                    os.remove(self.responsebody_path + 'log.csv')
+                    break
+                except PermissionError:
+                    time.sleep(3)
+
     # 采集视频流量并记录解密响应
     def capture_traffic(self, video_url, turn):
         for t in range(turn):
@@ -93,23 +106,22 @@ class Capture():
             self.wd.loop_get_url('about:blank')
             time.sleep(3)
             tsharkProc, mitmProc, tsharkOut = self.begin_tshark_mitm()
-
+            
             # 播放视频
-            self.wd.loop_get_url(video_url)
-            self.wd.play_video(video_url)
+            if self.wd.loop_get_url(video_url) == 0:
+                self.drop_out(tsharkProc, mitmProc, tsharkOut)
+                continue
+            if self.wd.play_video(video_url) == 0:
+                self.drop_out(tsharkProc, mitmProc, tsharkOut)
+                continue
             # 切换分辨率
             if self.if_auto_playback == 0:
-                self.wd.change_video_resolution(video_url, self.chose_resolution)
+                if self.wd.change_video_resolution(video_url, self.chose_resolution) == 0:
+                    self.drop_out(tsharkProc, mitmProc, tsharkOut)
+                    continue
             video_itag, audio_itag = self.wd.get_itag(video_url)
             if video_itag == 0 and audio_itag == 0:
-                self.end_tshark_mitm(tsharkProc, mitmProc, tsharkOut)
-                if os.path.exists(self.responsebody_path + 'log.csv'):
-                    for _ in range(5):
-                        try:
-                            os.remove(self.responsebody_path + 'log.csv')
-                            break
-                        except PermissionError:
-                            time.sleep(3)
+                self.drop_out(tsharkProc, mitmProc, tsharkOut)
                 continue
             time.sleep(self.time_duration + 10)
 
@@ -149,18 +161,18 @@ class Capture():
 
     # 批量采集
     def batch_capture(self, turn):
-        csv_file = open(self.url_list_path, 'r', encoding='utf-8')
+        # csv_file = open(self.url_list_path, 'r', encoding='utf-8')
+        csv_file = open(self.reurl_path, 'r', encoding='utf-8')
         csv_data = csv_file.read()
         video_urls = csv_data.split('\n')
 
         for i in range(0, len(video_urls)):
             try:
                 self.capture_traffic(video_urls[i], turn)
-            except Exception as e:
+            except:
                 print(f'{video_urls[i]}: capture error')
                 with open(self.wd.errorlog, 'a') as f:
                     f.write(f'{video_urls[i]}: capture error\n')
-                    f.write(str(e) + '\n')
 
     # 批量检查
     def batch_check(self):
@@ -198,6 +210,7 @@ class Capture():
             for url in urllist:
                 f.write(url[:44] + '\n')
 
+    # 清楚多余响应
     def clean_response(self):
         dir_response = os.listdir(self.responsebody_path)
         for file in dir_response:
@@ -206,47 +219,46 @@ class Capture():
                 print(f'{self.responsebody_path}{file}')
                 os.remove(f'{self.responsebody_path}{file}')
 
+    # 需要重新处理的url
+    def reurl(self):
+        reurls = {}
+        with open(self.wd.errorlog, 'r', encoding='utf-8') as f:
+            datas = f.readlines()
+        for data in datas:
+            data = data.split('\n')[0]
+            url = data.split(': ')[0]
+            error = data.split(': ')[1]
+            if url in reurls.keys():
+                reurls[url].append(error)
+            else:
+                reurls[url] = [error]
+        urls = list(reurls.keys())
+        with open(self.reurl_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(urls))
 
-def recheck():
-    capture = Capture()
-    video_urls = {}
-    with open('D:/VideoTrafficProcess/data/url/recheck.txt', 'r', encoding='utf-8') as f:
-        datas = f.readlines()
-    for data in datas:
-        data = data.split('\n')[0]
-        url = data.split(': ')[0]
-        title = data.split(': ')[1]
-        if url in video_urls.keys():
-            video_urls[url].append(title)
-        else:
-            video_urls[url] = [title]
-
-    t_time = time.strftime('%Y_%m_%d_%H_%M')
-    urls = list(video_urls.keys())
-    for url in urls:
-        if {'duration too short', 'resolution not include', 'duration error', 'resolution error'} & set(video_urls[url]) == set():
-            try:
-                if capture.check_video_info(url) == 1:
-                    with open(f'{capture.url_list_path.split(".")[0]}_check_{t_time}.csv', 'a') as f:
-                        f.write(url + '\n')
-            except Exception as e:
-                print(f'{url}: check error')
-                with open(capture.wd.errorlog, 'a') as f:
-                    f.write(f'{url}: check error\n')
+    # 获取采集涉及的url
+    def extra_url(self):
+        urls = ['https://www.youtube.com/watch?v=' + vid.split(' ')[0] for vid in os.listdir(self.pcap_path)]
+        print([url for url in urls if urls.count(url) > 1])
+        urls = list(set(urls))
+        urls.sort()
+        with open(self.exurl_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(urls))
 
 if __name__ == '__main__':
-    # recheck()
     capture = Capture()
     # capture.clawer_url()
     # capture.batch_check()
     # capture.clean_response()
+    # capture.reurl()
+    # capture.extra_url()
 
     # 更改端口
-    p = ProxySetting()
-    p.enable = True
-    p.server = '127.0.0.1:8080'
-    p.registry_write()
-    capture.batch_capture(1)
+    # p = ProxySetting()
+    # p.enable = True
+    # p.server = '127.0.0.1:8080'
+    # p.registry_write()
+    # capture.batch_capture(1)
 
     # capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
     # print(capture.check_video_info('https://www.youtube.com/watch?v=06D_ckhFa88'))

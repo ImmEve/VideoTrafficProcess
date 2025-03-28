@@ -218,9 +218,12 @@ class Video():
                     else:
                         os.remove(videopath)
                 command = f'yt-dlp --limit-rate 10K -f {itag} {self.url} -o {videopath}'.split(' ')
-                process = subprocess.Popen(command)
-                time.sleep(15)
-                process.kill()
+                try:
+                    process = subprocess.Popen(command)
+                    time.sleep(30)
+                    process.kill()
+                except:
+                    pass
                 time.sleep(3)
                 if os.path.exists(videopath + '.part'):
                     os.rename(videopath + '.part', videopath)
@@ -373,11 +376,11 @@ def batch_analyze():
 
 
 if __name__ == '__main__':
-    # batch_download()
+    batch_download()
     # batch_analyze()
-    video = Video('https://www.youtube.com//watch?v=-6H86cOjtSU')
-    video.get_websource()
-    video.analyse_websource()
-    video.download_video()
+    # video = Video('https://www.youtube.com//watch?v=-X2NpnPHbEs')
+    # video.get_websource()
+    # video.analyse_websource()
+    # video.download_video()
     # video.analyse_video()
-    video.conbine_video()
+    # video.conbine_video()
