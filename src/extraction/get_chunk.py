@@ -12,7 +12,7 @@ workdir = conf.get('global', 'workdir')
 class Traffic:
     def __init__(self, pcap):
         self.tshark_path = conf.get('capture', 'tshark_path')
-        self.fingerpath = workdir + conf.get('get_chunk', 'fingerpath')
+        self.fingerpath = workdir + conf.get('extracion', 'fingerpath')
         os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
         self.pcap = pcap
         self.time = pcap.split(' ')[-1].split('.')[0]
@@ -75,7 +75,7 @@ class Traffic:
             tsharkProc = subprocess.Popen(tsharkCall, stdout=subprocess.PIPE, executable=self.tshark_path)
             tsharkOut = tsharkProc.stdout.read().decode('utf-8')
             record_length_list = tsharkOut.replace('\r\n', ',').split(',')
-            record_length_list = [int(i) - 17 for i in record_length_list if i != '']
+            record_length_list = [int(i) - 16 - 1 for i in record_length_list if i != '']
 
             record2chunk_list = []
             record2chunk = []

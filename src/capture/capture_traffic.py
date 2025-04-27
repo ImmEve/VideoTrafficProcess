@@ -22,44 +22,11 @@ class Capture():
         self.tshark_interface = conf.get('capture', 'tshark_interface')
         self.tshark_path = conf.get('capture', 'tshark_path')
         self.mitmdump_path = conf.get('capture', 'mitmdump_path')
-        self.time_duration = int(conf.get('capture', 'time_duration'))
-        self.check_resolution = conf.get('capture', 'check_resolution').split(',')
-        self.if_auto_playback = int(conf.get('capture', 'if_auto_playback'))
+        self.time_duration = conf.getint('capture', 'time_duration')
         self.chose_resolution = conf.get('capture', 'chose_resolution')
         self.reurl_path = workdir + conf.get('capture', 'reurl_path')
         self.exurl_path = workdir + conf.get('capture', 'exurl_path')
         self.wd = Webdriver()
-
-    # 检查视频信息
-    def check_video_info(self, video_url):
-        print('start checking...')
-        # 打开视频
-        if self.wd.loop_get_url(video_url) == 0:
-            return 0
-        time.sleep(10)
-        # 获取视频时长
-        video_duration = self.wd.get_video_duration(video_url)
-        if video_duration == 0:
-            return 0
-        # 获取视频时长（秒）
-        duration_of_the_video = self.wd.get_video_duration_second(video_duration)
-        # 获取视频分辨率信息
-        video_resolution = self.wd.get_video_resolution(video_url)
-        if video_resolution == 0:
-            return 0
-        # 检查视频时长
-        if duration_of_the_video < self.time_duration:
-            print(f'{video_url}: duration too short')
-            with open(self.wd.errorlog, 'a') as f:
-                f.write(f'{video_url}: duration too short\n')
-            return 0
-        # 检查分辨率
-        if not (set(video_resolution) >= set(self.check_resolution)):
-            print(f'{video_url}: resolution not include')
-            with open(self.wd.errorlog, 'a') as f:
-                f.write(f'{video_url}: resolution not include\n')
-            return 0
-        return 1
 
     # 开始记录网络流量
     def begin_tshark_mitm(self):
@@ -114,8 +81,9 @@ class Capture():
             if self.wd.play_video(video_url) == 0:
                 self.drop_out(tsharkProc, mitmProc, tsharkOut)
                 continue
+
             # 切换分辨率
-            if self.if_auto_playback == 0:
+            if self.chose_resolution != '0':
                 if self.wd.change_video_resolution(video_url, self.chose_resolution) == 0:
                     self.drop_out(tsharkProc, mitmProc, tsharkOut)
                     continue
@@ -161,8 +129,7 @@ class Capture():
 
     # 批量采集
     def batch_capture(self, turn):
-        # csv_file = open(self.url_list_path, 'r', encoding='utf-8')
-        csv_file = open(self.reurl_path, 'r', encoding='utf-8')
+        csv_file = open(self.url_list_path + 'url.csv', 'r', encoding='utf-8')
         csv_data = csv_file.read()
         video_urls = csv_data.split('\n')
 
@@ -174,42 +141,6 @@ class Capture():
                 with open(self.wd.errorlog, 'a') as f:
                     f.write(f'{video_urls[i]}: capture error\n')
 
-    # 批量检查
-    def batch_check(self):
-        with open(self.url_list_path, 'r', encoding='utf-8') as f:
-            csv_data = f.read()
-            video_urls = csv_data.split('\n')
-
-        t_time = time.strftime('%Y_%m_%d_%H_%M')
-        for i in range(0, len(video_urls)):
-            try:
-                if self.check_video_info(video_urls[i]) == 1:
-                    with open(f'{self.url_list_path.split(".")[0]}_check_{t_time}.csv', 'a') as f:
-                        f.write(video_urls[i] + '\n')
-            except Exception as e:
-                print(f'{video_urls[i]}: check error')
-                with open(self.wd.errorlog, 'a') as f:
-                    f.write(f'{video_urls[i]}: check error\n')
-
-    # 抓取url
-    def clawer_url(self):
-        with open(self.url_class_path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            class_list = list(reader)
-        urllist = []
-        for class_url in range(len(class_list)):
-            # 打开视频
-            if self.wd.loop_get_url(class_list[class_url][1]) == 0:
-                continue
-            time.sleep(10)
-            urls = self.wd.get_urllist()
-            urllist = urllist + urls
-        urllist = list(set(urllist))
-        t_time = time.strftime('%Y_%m_%d_%H_%M')
-        with open(f'{self.url_list_path.split(".")[0]}_{t_time}.csv', 'w') as f:
-            for url in urllist:
-                f.write(url[:44] + '\n')
-
     # 清楚多余响应
     def clean_response(self):
         dir_response = os.listdir(self.responsebody_path)
@@ -219,39 +150,9 @@ class Capture():
                 print(f'{self.responsebody_path}{file}')
                 os.remove(f'{self.responsebody_path}{file}')
 
-    # 需要重新处理的url
-    def reurl(self):
-        reurls = {}
-        with open(self.wd.errorlog, 'r', encoding='utf-8') as f:
-            datas = f.readlines()
-        for data in datas:
-            data = data.split('\n')[0]
-            url = data.split(': ')[0]
-            error = data.split(': ')[1]
-            if url in reurls.keys():
-                reurls[url].append(error)
-            else:
-                reurls[url] = [error]
-        urls = list(reurls.keys())
-        with open(self.reurl_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(urls))
-
-    # 获取采集涉及的url
-    def extra_url(self):
-        urls = ['https://www.youtube.com/watch?v=' + vid.split(' ')[0] for vid in os.listdir(self.pcap_path)]
-        print([url for url in urls if urls.count(url) > 1])
-        urls = list(set(urls))
-        urls.sort()
-        with open(self.exurl_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(urls))
-
 if __name__ == '__main__':
     capture = Capture()
-    # capture.clawer_url()
-    # capture.batch_check()
     # capture.clean_response()
-    # capture.reurl()
-    # capture.extra_url()
 
     # 更改端口
     # p = ProxySetting()
@@ -261,4 +162,3 @@ if __name__ == '__main__':
     # capture.batch_capture(1)
 
     # capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
-    # print(capture.check_video_info('https://www.youtube.com/watch?v=06D_ckhFa88'))

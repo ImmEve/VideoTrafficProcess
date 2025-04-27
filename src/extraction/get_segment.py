@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 conf = configparser.ConfigParser()
 conf.read('config.conf', encoding='UTF-8')
 workdir = conf.get('global', 'workdir')
+url_list_path = workdir + conf.get('capture', 'url_list_path')
 
 class Reference():
     def __init__(self, Reference_Type, Reference_Size, Subsegment_Duration, Starts_with_SAP, SAP_Type):
@@ -134,21 +135,19 @@ class Box():
 
 class Video():
     def __init__(self, url):
-        self.datapath = workdir + conf.get('get_segment', 'datapath')
+        self.datapath = workdir + conf.get('extracion', 'datapath')
         os.makedirs(self.datapath, exist_ok=True)
         os.makedirs(f'{self.datapath}websource', exist_ok=True)
         os.makedirs(f'{self.datapath}videoheader', exist_ok=True)
-        self.fingerpath = workdir + conf.get('get_segment', 'fingerpath')
-        t_time = time.strftime('%Y_%m_%d_%H_%M')
-        self.fingerpath = f'{self.fingerpath.split(".")[0]}_{t_time}.csv'
-        os.makedirs(os.path.dirname(self.fingerpath), exist_ok=True)
+        self.fingerpath = workdir + conf.get('extracion', 'fingerpath')
+        os.makedirs(self.fingerpath, exist_ok=True)
         self.errorlog = workdir + conf.get('capture', 'errorlog')
         self.url = url
         self.video_name = self.url.split('=')[1]
-        self.video_mp4_itag = ['136', '398']
-        self.audio_mp4_itag = []
-        self.video_webm_itag = ['247']
-        self.audio_webm_itag = ['251', '251-drc']
+        self.video_mp4_itag = conf.get('filter', 'video_mp4_itag').split(',')
+        self.video_webm_itag = conf.get('filter', 'video_webm_itag').split(',')
+        self.audio_mp4_itag = conf.get('filter', 'audio_mp4_itag').split(',')
+        self.audio_webm_itag = conf.get('filter', 'audio_webm_itag').split(',')
 
     def get_websource(self):
         response = requests.get(self.url)
@@ -184,6 +183,7 @@ class Video():
         self.itag_indexrange = {}
         self.itag_contentlength = {}
         self.itag_quality = {}
+        self.itag_durationMs = {}
         for param in service_tracking_params:
             itag = str(param.get('itag'))
             if param.get('isDrc'):
@@ -204,6 +204,7 @@ class Video():
                     self.itag_quality[itag] = param.get('qualityLabel')
                 elif self.itag_mimetype[itag] == 'audio':
                     self.itag_quality[itag] = param.get('audioQuality')
+                self.itag_durationMs[itag] = param.get('approxDurationMs')
 
     def download_video(self):
         os.makedirs(f'{self.datapath}videoheader/{self.video_name}', exist_ok=True)
@@ -242,10 +243,10 @@ class Video():
             except:
                 continue
 
-            if not os.path.exists(self.fingerpath):
-                with open(self.fingerpath, 'a') as f:
+            if not os.path.exists(self.fingerpath + 'video.csv'):
+                with open(self.fingerpath + 'video.csv', 'a') as f:
                     f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
-            with open(self.fingerpath, 'a') as f:
+            with open(self.fingerpath + 'video.csv', 'a') as f:
                 vid = self.video_name
                 f.write(
                     f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
@@ -277,10 +278,10 @@ class Video():
                 except:
                     continue
 
-                if not os.path.exists(self.fingerpath.split('.')[0] + '_combine.csv'):
-                    with open(self.fingerpath.split('.')[0] + '_combine.csv', 'a') as f:
+                if not os.path.exists(self.fingerpath + 'video_combine.csv'):
+                    with open(self.fingerpath + 'video_combine.csv', 'a') as f:
                         f.write('vid,itag,contentlength,seg_num,seg_list\n')
-                with open(self.fingerpath.split('.')[0] + '_combine.csv', 'a') as f:
+                with open(self.fingerpath + 'video_combine.csv', 'a') as f:
                     vid = self.video_name
                     f.write(f'{vid},{video_itag}/{audio_itag},{str(self.itag_contentlength[video_itag] + self.itag_contentlength[audio_itag])},')
                     if video_box.filetype == 'mp4':
@@ -308,77 +309,57 @@ class Video():
                 
 
 def batch_download():
-    url_list_path = workdir + conf.get('capture', 'url_list_path')
-    datapath = workdir + conf.get('get_segment', 'datapath')
     errorlog = workdir + conf.get('capture', 'errorlog')
-
-    with open(url_list_path, 'r') as f:
+    with open(url_list_path + 'url_redo.csv', 'r') as f:
         reader = csv.reader(f)
         txt = list(reader)
     url_list = [i[0] for i in txt]
     with ThreadPoolExecutor(max_workers=3) as executor:
         for url in url_list:
             video = Video(url)
-            video.get_websource()
+            # video.get_websource()
             try:
                 video.analyse_websource()
             except:
-                print(f'{url[-11:]}: websource error')
+                print(f'{url[-11:]}: analyse websource error')
                 with open(errorlog, 'a') as f:
-                    f.write(f'{url[-11:]}: websource error\n')
+                    f.write(f'{url[-11:]}: analyse websource error\n')
                 continue
             executor.submit(video.download_video)
 
-    with open(errorlog, 'r') as f:
-        reader = csv.reader(f)
-        txt = list(reader)
-    txt = list(set([i[0].split(':')[0] for i in txt]))
-    for url in txt:
-        if os.path.exists(f'{datapath}websource/{url}.html'):
-            try:
-                os.remove(f'{datapath}websource/{url}.html')
-            except:
-                print(f'{url}: remove websource error')
-        if os.path.exists(f'{datapath}videoheader/{url}'):
-            try:
-                shutil.rmtree(f'{datapath}videoheader/{url}')
-            except:
-                print(f'{url}: remove videoheader error')
-
 
 def batch_analyze():
-    if_ues_url_list = int(conf.get('get_segment', 'if_ues_url_list'))
-    url_list_path = workdir + conf.get('capture', 'url_list_path')
+    if_ues_url_list = int(conf.get('extracion', 'if_ues_url_list'))
     if if_ues_url_list:     
-        with open(url_list_path, 'r') as f:
+        with open(url_list_path + 'url_10min.csv', 'r') as f:
             reader = csv.reader(f)
             txt = list(reader)
         urls = [i[0] for i in txt]
     else:
-        datapath = workdir + conf.get('get_segment', 'datapath')
+        datapath = workdir + conf.get('extracion', 'datapath')
         files = os.listdir(datapath + 'videoheader')
         urls = ['https://www.youtube.com//watch?v=' + i for i in files]
 
-    fingerpath = workdir + conf.get('get_segment', 'fingerpath')
+    fingerpath = workdir + conf.get('extracion', 'fingerpath')
     for url in urls:
         video = Video(url)
         video.analyse_websource()
         video.analyse_video()
         video.conbine_video()
 
-    with open(fingerpath, 'r') as f:
+    with open(fingerpath + 'video_combine.csv', 'r') as f:
         reader = csv.reader(f)
         txt = list(reader)
     txt = list(set([i[0] for i in txt[1:]]))
-    with open(f'{url_list_path.split(".")[0]}_segment.csv', 'w') as f:
+    with open(url_list_path + 'url_segment.csv', 'w') as f:
         for url in txt:
-            f.write(f'{url}\n')
+            f.write(f'https://www.youtube.com/watch?v={url}\n')
 
 
 if __name__ == '__main__':
-    batch_download()
-    # batch_analyze()
-    # video = Video('https://www.youtube.com//watch?v=-X2NpnPHbEs')
+    # batch_download()
+    batch_analyze()
+    # video = Video('https://www.youtube.com//watch?v=ILRp27Oes_0')
     # video.get_websource()
     # video.analyse_websource()
     # video.download_video()
