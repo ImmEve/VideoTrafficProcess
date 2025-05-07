@@ -20,7 +20,7 @@ for responsebody in responsebodys:
     vid = responsebody.split(' ')[0]
     if 'https://www.youtube.com/watch?v=' + vid not in urls:
         continue
-    itag = responsebody.split(' ')[1]
+    itag = responsebody.split(' ')[1].replace('_', '/')
     # t = responsebody.split(' ')[-1].split('.')[0]
     file_path = responsebody_path + responsebody
     with open(file_path, 'r', encoding='utf-8') as file:
