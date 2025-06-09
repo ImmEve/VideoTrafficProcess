@@ -3,7 +3,6 @@ import csv
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor

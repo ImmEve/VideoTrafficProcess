@@ -187,4 +187,4 @@ class Webdriver():
 
 if __name__ == '__main__':
     wd = Webdriver()
-    
+    wd.loop_get_url('https://www.youtube.com/watch?v=uYlH3SAIXUQ')

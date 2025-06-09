@@ -24,8 +24,6 @@ class Capture():
         self.mitmdump_path = conf.get('capture', 'mitmdump_path')
         self.time_duration = conf.getint('capture', 'time_duration')
         self.chose_resolution = conf.get('capture', 'chose_resolution')
-        self.reurl_path = workdir + conf.get('capture', 'reurl_path')
-        self.exurl_path = workdir + conf.get('capture', 'exurl_path')
         self.wd = Webdriver()
 
     # 开始记录网络流量
@@ -161,4 +159,4 @@ if __name__ == '__main__':
     # p.registry_write()
     # capture.batch_capture(1)
 
-    # capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
+    capture.capture_traffic('https://www.youtube.com/watch?v=uYlH3SAIXUQ', 1)
