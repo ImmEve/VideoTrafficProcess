@@ -5,15 +5,12 @@ import os
 import re
 import subprocess
 import time
+import argparse
 from concurrent.futures import ThreadPoolExecutor
 from itertools import accumulate
 import requests
 from bs4 import BeautifulSoup
 
-conf = configparser.ConfigParser()
-conf.read('config.conf', encoding='UTF-8')
-workdir = conf.get('global', 'workdir')
-url_list_path = workdir + conf.get('capture', 'url_list_path')
 
 class Reference():
     def __init__(self, Reference_Type, Reference_Size, Subsegment_Duration, Starts_with_SAP, SAP_Type):
@@ -133,82 +130,102 @@ class Box():
 
 
 class Video():
-    def __init__(self, url):
-        self.datapath = workdir + conf.get('extracion', 'datapath')
-        os.makedirs(self.datapath, exist_ok=True)
-        os.makedirs(f'{self.datapath}websource', exist_ok=True)
-        os.makedirs(f'{self.datapath}videoheader', exist_ok=True)
-        self.fingerpath = workdir + conf.get('extracion', 'fingerpath')
-        os.makedirs(self.fingerpath, exist_ok=True)
-        self.errorlog = workdir + conf.get('capture', 'errorlog')
-        self.url = url
-        self.video_name = self.url.split('=')[1]
-        self.video_mp4_itag = conf.get('filter', 'video_mp4_itag').split(',')
-        self.video_webm_itag = conf.get('filter', 'video_webm_itag').split(',')
-        self.audio_mp4_itag = conf.get('filter', 'audio_mp4_itag').split(',')
-        self.audio_webm_itag = conf.get('filter', 'audio_webm_itag').split(',')
+    def __init__(self, video_url, videofile_path, fingerprint_path):
+        conf = configparser.ConfigParser()
+        conf.read('src/extraction/config.conf', encoding='UTF-8')
+        workdir = os.getcwd() + os.sep
+        self.videofile_path = videofile_path
+        os.makedirs(self.videofile_path, exist_ok=True)
+        os.makedirs(f'{self.videofile_path}websource', exist_ok=True)
+        os.makedirs(f'{self.videofile_path}videoheader', exist_ok=True)
+        self.fingerprint_path = fingerprint_path
+        os.makedirs(self.fingerprint_path, exist_ok=True)
+        self.errorlog = workdir + conf.get('path', 'errorlog')
+        self.video_mp4_itag = conf.get('parameter', 'video_mp4_itag').split(',')
+        self.video_webm_itag = conf.get('parameter', 'video_webm_itag').split(',')
+        self.audio_mp4_itag = conf.get('parameter', 'audio_mp4_itag').split(',')
+        self.audio_webm_itag = conf.get('parameter', 'audio_webm_itag').split(',')
+        self.video_url = video_url
+        self.video_name = self.video_url.split('=')[1]
 
     def get_websource(self):
-        response = requests.get(self.url)
-        if response.status_code == 200:
-            with open(f'{self.datapath}websource/{self.video_name}.html', 'w', encoding='utf-8') as f:
-                f.write(response.text)
+        # if os.path.exists(f'{self.videofile_path}websource/{self.video_name}.html'):
+        #     return 1
+        for i in range(5):
+            try:
+                response = requests.get(self.video_url)
+                # if 'adaptiveFormats' in response.text:
+                with open(f'{self.videofile_path}websource/{self.video_name}.html', 'w', encoding='utf-8') as f:
+                    f.write(response.text)
+                return 1
+            except:
+                pass
+        print(f'{self.video_name}: get websource error')
+        with open(self.errorlog, 'a') as f:
+            f.write(f'{self.video_name}: get websource error\n')
+        return 0
 
     def analyse_websource(self):
-        with open(f'{self.datapath}websource/{self.video_name}.html', 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        soup = BeautifulSoup(html_content, 'html.parser')
-        # 找到所有的 <script> 标签
-        script_tags = soup.find_all('script')
-        # 定义正则表达式来匹配 JavaScript 变量
-        pattern = re.compile(r'var\s+ytInitialPlayerResponse\s*=\s*({.*?});', re.DOTALL)
+        try:
+            with open(f'{self.videofile_path}websource/{self.video_name}.html', 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            soup = BeautifulSoup(html_content, 'html.parser')
+            # 找到所有的 <script> 标签
+            script_tags = soup.find_all('script')
+            # 定义正则表达式来匹配 JavaScript 变量
+            pattern = re.compile(r'var\s+ytInitialPlayerResponse\s*=\s*({.*?});', re.DOTALL)
 
-        # 在每个 <script> 标签中搜索匹配的内容
-        for script_tag in script_tags:
-            # 获取 <script> 标签的所有内容，并将其合并为一个字符串
-            script_content = ''.join(map(str, script_tag.contents))
-            # 使用正则表达式匹配 JavaScript 变量
-            match = pattern.search(script_content)
-            if match:
-                # 提取匹配的 JavaScript 变量内容
-                javascript_code = match.group(1)
-        data = json.loads(javascript_code)
-        service_tracking_params = data.get('streamingData', {}).get('adaptiveFormats', [])
+            # 在每个 <script> 标签中搜索匹配的内容
+            for script_tag in script_tags:
+                # 获取 <script> 标签的所有内容，并将其合并为一个字符串
+                script_content = ''.join(map(str, script_tag.contents))
+                # 使用正则表达式匹配 JavaScript 变量
+                match = pattern.search(script_content)
+                if match:
+                    # 提取匹配的 JavaScript 变量内容
+                    javascript_code = match.group(1)
+            data = json.loads(javascript_code)
+            service_tracking_params = data.get('streamingData', {}).get('adaptiveFormats', [])
 
-        self.itag_list = []
-        self.itag_filetype = {}
-        self.itag_mimetype = {}
-        self.itag_vcodec = {}
-        self.itag_indexrange = {}
-        self.itag_contentlength = {}
-        self.itag_quality = {}
-        self.itag_durationMs = {}
-        for param in service_tracking_params:
-            itag = str(param.get('itag'))
-            if param.get('isDrc'):
-                itag = itag + '-drc'
-            if itag in self.itag_list:
-                continue
-            if itag in (self.video_mp4_itag + self.video_webm_itag + self.audio_mp4_itag + self.audio_webm_itag):
-                self.itag_list.append(itag)
-                self.itag_filetype[itag] = param['mimeType'].split('/')[1].split(';')[0]
-                self.itag_mimetype[itag] = param['mimeType'].split('/')[0]
-                self.itag_vcodec[itag] = param['mimeType'].split('\"')[1].split('.')[0]
-                indexRange = param.get('indexRange')
-                indexRange['start'] = int(indexRange['start'])
-                indexRange['end'] = int(indexRange['end'])
-                self.itag_indexrange[itag] = indexRange
-                self.itag_contentlength[itag] = int(param.get('contentLength'))
-                if self.itag_mimetype[itag] == 'video':
-                    self.itag_quality[itag] = param.get('qualityLabel')
-                elif self.itag_mimetype[itag] == 'audio':
-                    self.itag_quality[itag] = param.get('audioQuality')
-                self.itag_durationMs[itag] = param.get('approxDurationMs')
+            self.itag_list = []
+            self.itag_filetype = {}
+            self.itag_mimetype = {}
+            self.itag_vcodec = {}
+            self.itag_indexrange = {}
+            self.itag_contentlength = {}
+            self.itag_quality = {}
+            self.itag_durationMs = {}
+            for param in service_tracking_params:
+                itag = str(param.get('itag'))
+                if param.get('isDrc'):
+                    itag = itag + '-drc'
+                if itag in self.itag_list:
+                    continue
+                if itag in (self.video_mp4_itag + self.video_webm_itag + self.audio_mp4_itag + self.audio_webm_itag):
+                    self.itag_list.append(itag)
+                    self.itag_filetype[itag] = param['mimeType'].split('/')[1].split(';')[0]
+                    self.itag_mimetype[itag] = param['mimeType'].split('/')[0]
+                    self.itag_vcodec[itag] = param['mimeType'].split('\"')[1].split('.')[0]
+                    indexRange = param.get('indexRange')
+                    indexRange['start'] = int(indexRange['start'])
+                    indexRange['end'] = int(indexRange['end'])
+                    self.itag_indexrange[itag] = indexRange
+                    self.itag_contentlength[itag] = int(param.get('contentLength'))
+                    if self.itag_mimetype[itag] == 'video':
+                        self.itag_quality[itag] = param.get('qualityLabel')
+                    elif self.itag_mimetype[itag] == 'audio':
+                        self.itag_quality[itag] = param.get('audioQuality')
+                    self.itag_durationMs[itag] = param.get('approxDurationMs')
+            return 1
+        except:
+            print(f'{self.video_name}: analyse websource error')
+            with open(self.errorlog, 'a') as f:
+                f.write(f'{self.video_name}: analyse websource error\n')
+            return 0
 
     def download_video(self):
-        os.makedirs(f'{self.datapath}videoheader/{self.video_name}', exist_ok=True)
         for itag in self.itag_list:
-            videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
+            videopath = f'{self.videofile_path}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
             flag = 0
             for i in range(5):
                 if os.path.exists(videopath):
@@ -217,8 +234,10 @@ class Video():
                         break
                     else:
                         os.remove(videopath)
-                command = f'yt-dlp --limit-rate 10K -f {itag} {self.url} -o {videopath}'.split(' ')
+                
+                command = f'yt-dlp --limit-rate 10K -f {itag} {self.video_url} -o {videopath}'.split(' ')
                 try:
+                    
                     process = subprocess.Popen(command)
                     time.sleep(30)
                     process.kill()
@@ -232,135 +251,206 @@ class Video():
                 with open(self.errorlog, 'a') as f:
                     f.write(f'{self.video_name}: download video {itag} error\n')
 
-    def analyse_video(self):
+    def get_video_fingerprint(self):
         for itag in self.itag_list:
-            start, end = self.itag_indexrange[itag]['start'], self.itag_indexrange[itag]['end']
-            videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
-            # videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{itag}.{self.itag_filetype[itag]}'
             try:
+                start, end = self.itag_indexrange[itag]['start'], self.itag_indexrange[itag]['end']
+                videopath = f'{self.videofile_path}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[itag]}_{itag}.{self.itag_filetype[itag]}'
                 box = Box(self.itag_filetype[itag], start, end, videopath)
+
+                fingerprint_csv = self.fingerprint_path + 'video0.csv'
+                if not os.path.exists(fingerprint_csv):
+                    with open(fingerprint_csv, 'a') as f:
+                        f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
+                with open(fingerprint_csv, 'a') as f:
+                    vid = self.video_name
+                    if self.itag_mimetype[itag] == 'video' and box.filetype == 'mp4':
+                        seg_list = box.reference_list[:-1]
+                        dura_list = [1000 * x // box.Timescale for x in box.duration_list[:-1]]
+                        time_list = list(accumulate(dura_list))
+                    elif self.itag_mimetype[itag] == 'video' and box.filetype == 'webm':
+                        seg_list = box.track_list
+                        time_list = box.timeline[1:]
+                    elif self.itag_mimetype[itag] == 'audio' and box.filetype == 'mp4':
+                        seg_list = box.reference_list
+                        dura_list = [1000 * x // box.Timescale for x in box.duration_list[:-1]]
+                        time_list = [0] + list(accumulate(dura_list))
+                    elif self.itag_mimetype[itag] == 'audio' and box.filetype == 'webm':
+                        seg_list = box.track_list
+                        time_list = box.timeline[:-1]
+                    seg_str = '/'.join([str(seg) for seg in seg_list])
+                    time_str = '/'.join([str(tim) for tim in time_list])
+                    f.write(f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},{str(len(seg_list))},{seg_str},{time_str}\n')
             except:
-                continue
+                print(f'{self.video_name}: get video fingerprint {itag} error')
+                with open(self.errorlog, 'a') as f:
+                    f.write(f'{self.video_name}: get video fingerprint {itag} error\n')
+                # return 0
+        return 1
 
-            if not os.path.exists(self.fingerpath + 'video.csv'):
-                with open(self.fingerpath + 'video.csv', 'a') as f:
-                    f.write('vid,itag,mimetype/filetype,quality,vcodec,contentlength,seg_num,seg_list,time_list\n')
-            with open(self.fingerpath + 'video.csv', 'a') as f:
-                vid = self.video_name
-                f.write(
-                    f'{vid},{itag},{self.itag_mimetype[itag]}/{self.itag_filetype[itag]},{self.itag_quality[itag]},{self.itag_vcodec[itag]},{str(self.itag_contentlength[itag])},')
-                if box.filetype == 'mp4':
-                    seg_list = box.reference_list[:-1]
-                    dura_list = [1000 * x // box.Timescale for x in box.duration_list[:-1]]
-                    time_list = [0] + list(accumulate(dura_list[:-1]))
-                elif box.filetype == 'webm':
-                    seg_list = box.track_list
-                    time_list = box.timeline[:-1]
-                f.write(str(len(seg_list)) + ',')
-                seg_str = '/'.join([str(seg) for seg in seg_list])
-                f.write(seg_str + ',')
-                time_str = '/'.join([str(tim) for tim in time_list])
-                f.write(time_str + '\n')
-
-    def conbine_video(self):
+    def get_video_fusion_fingerprint(self):
         video_itags = list(set(self.itag_list) & set(self.video_mp4_itag + self.video_webm_itag))
         audio_itags = list(set(self.itag_list) & set(self.audio_mp4_itag + self.audio_webm_itag))
         for video_itag in video_itags:
             for audio_itag in audio_itags:
-                video_start, video_end = self.itag_indexrange[video_itag]['start'], self.itag_indexrange[video_itag]['end']
-                audio_start, audio_end = self.itag_indexrange[audio_itag]['start'], self.itag_indexrange[audio_itag]['end']
-                videopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[video_itag]}_{video_itag}.{self.itag_filetype[video_itag]}'
-                audiopath = f'{self.datapath}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[audio_itag]}_{audio_itag}.{self.itag_filetype[audio_itag]}'
                 try:
-                    video_box = Box(self.itag_filetype[video_itag], video_start, video_end, videopath)
-                    audio_box = Box(self.itag_filetype[audio_itag], audio_start, audio_end, audiopath)
-                except:
-                    continue
+                    video_start, video_end = self.itag_indexrange[video_itag]['start'], self.itag_indexrange[video_itag]['end']
+                    audio_start, audio_end = self.itag_indexrange[audio_itag]['start'], self.itag_indexrange[audio_itag]['end']
+                    videopath = f'{self.videofile_path}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[video_itag]}_{video_itag}.{self.itag_filetype[video_itag]}'
+                    audiopath = f'{self.videofile_path}videoheader/{self.video_name}/{self.video_name}_{self.itag_mimetype[audio_itag]}_{audio_itag}.{self.itag_filetype[audio_itag]}'
+                    try:
+                        video_box = Box(self.itag_filetype[video_itag], video_start, video_end, videopath)
+                        audio_box = Box(self.itag_filetype[audio_itag], audio_start, audio_end, audiopath)
+                    except:
+                        continue
 
-                if not os.path.exists(self.fingerpath + 'video_combine.csv'):
-                    with open(self.fingerpath + 'video_combine.csv', 'a') as f:
-                        f.write('vid,itag,contentlength,seg_num,seg_list\n')
-                with open(self.fingerpath + 'video_combine.csv', 'a') as f:
-                    vid = self.video_name
-                    f.write(f'{vid},{video_itag}/{audio_itag},{str(self.itag_contentlength[video_itag] + self.itag_contentlength[audio_itag])},')
-                    if video_box.filetype == 'mp4':
-                        video_seg_list = video_box.reference_list[:-1]
-                        video_dura_list = [1000 * x // video_box.Timescale for x in video_box.duration_list[:-1]]
-                        video_time_list = [0] + list(accumulate(video_dura_list[:-1]))
-                    elif video_box.filetype == 'webm':
-                        video_seg_list = video_box.track_list
-                        video_time_list = video_box.timeline[:-1]
-                    if audio_box.filetype == 'mp4':
-                        audio_seg_list = audio_box.reference_list[:-1]
-                        audio_dura_list = [1000 * x // audio_box.Timescale for x in audio_box.duration_list[:-1]]
-                        audio_time_list = [0] + list(accumulate(audio_dura_list[:-1]))
-                    elif audio_box.filetype == 'webm':
-                        audio_seg_list = audio_box.track_list
-                        audio_time_list = audio_box.timeline[:-1]
-                    video_time_list[0] = 1
-                    f.write(str(len(video_seg_list) + len(audio_seg_list)) + ',')
-                    com_dict = dict(zip(video_time_list + audio_time_list, video_seg_list + audio_seg_list))
-                    com_time = list(com_dict.keys())
-                    com_time.sort()
-                    com_seg = [str(com_dict[i]) for i in com_time]
-                    seg_str = '/'.join([str(seg) for seg in com_seg])
-                    f.write(seg_str + '\n')
+                    if not os.path.exists(self.fingerprint_path + 'video.csv'):
+                        with open(self.fingerprint_path + 'video.csv', 'a') as f:
+                            f.write('vid,itag,contentlength,seg_num,seg_list\n')
+                    with open(self.fingerprint_path + 'video.csv', 'a') as f:
+                        vid = self.video_name
+                        if video_box.filetype == 'mp4':
+                            video_seg_list = video_box.reference_list[:-1]
+                            video_dura_list = [1000 * x // video_box.Timescale for x in video_box.duration_list[:-1]]
+                            video_time_list = list(accumulate(video_dura_list))
+                        elif video_box.filetype == 'webm':
+                            video_seg_list = video_box.track_list
+                            video_time_list = video_box.timeline[1:]
+                        if audio_box.filetype == 'mp4':
+                            audio_seg_list = audio_box.reference_list
+                            audio_dura_list = [1000 * x // audio_box.Timescale for x in audio_box.duration_list[:-1]]
+                            audio_time_list = [0] + list(accumulate(audio_dura_list))
+                        elif audio_box.filetype == 'webm':
+                            audio_seg_list = audio_box.track_list
+                            audio_time_list = audio_box.timeline[:-1]
+                        com_dict = dict(zip(video_time_list + audio_time_list, video_seg_list + audio_seg_list))
+                        com_time = list(com_dict.keys())
+                        com_time.sort()
+                        com_seg = [str(com_dict[i]) for i in com_time]
+                        seg_str = '/'.join([str(seg) for seg in com_seg])
+                        f.write(f'{vid},{video_itag}/{audio_itag},{str(self.itag_contentlength[video_itag] + self.itag_contentlength[audio_itag])},{str(len(video_seg_list) + len(audio_seg_list))},{seg_str}\n')
+                except:
+                    print(f'{self.video_name}: get video fusion fingerprint {video_itag}/{audio_itag} error')
+                    with open(self.errorlog, 'a') as f:
+                        f.write(f'{self.video_name}: get video fusion fingerprint {video_itag}/{audio_itag} error\n')
+                    return 0
+        return 1
                 
 
-def batch_download():
-    errorlog = workdir + conf.get('capture', 'errorlog')
-    with open(url_list_path + 'url_redo.csv', 'r') as f:
-        reader = csv.reader(f)
-        txt = list(reader)
-    url_list = [i[0] for i in txt]
+def batch_download(video_urls, videofile_path, fingerprint_path):
     with ThreadPoolExecutor(max_workers=3) as executor:
-        for url in url_list:
-            video = Video(url)
-            # video.get_websource()
-            try:
-                video.analyse_websource()
-            except:
-                print(f'{url[-11:]}: analyse websource error')
-                with open(errorlog, 'a') as f:
-                    f.write(f'{url[-11:]}: analyse websource error\n')
+        for video_url in video_urls:
+            video = Video(video_url, videofile_path, fingerprint_path)
+            if video.get_websource() == 0:
+                continue
+            if video.analyse_websource() == 0:
                 continue
             executor.submit(video.download_video)
 
 
-def batch_analyze():
-    if_ues_url_list = int(conf.get('extracion', 'if_ues_url_list'))
-    if if_ues_url_list:     
-        with open(url_list_path + 'url_10min.csv', 'r') as f:
+def batch_get_video_fingerprint(video_urls, videofile_path, fingerprint_path):
+    for video_url in video_urls:
+        video = Video(video_url, videofile_path, fingerprint_path)
+        if video.analyse_websource() == 0:
+            continue
+        video.get_video_fingerprint()
+
+
+def batch_get_video_fusion_fingerprint(video_urls, videofile_path, fingerprint_path):
+    for video_url in video_urls:
+        video = Video(video_url, videofile_path, fingerprint_path)
+        if video.analyse_websource() == 0:
+            continue
+        video.get_video_fusion_fingerprint()
+
+
+def get_video_urls(if_use_url_list, url_list_path, videofile_path):
+    if if_use_url_list:
+        with open(url_list_path, 'r') as f:
             reader = csv.reader(f)
             txt = list(reader)
-        urls = [i[0] for i in txt]
+        video_urls = [i[0] for i in txt]
     else:
-        datapath = workdir + conf.get('extracion', 'datapath')
-        files = os.listdir(datapath + 'videoheader')
-        urls = ['https://www.youtube.com//watch?v=' + i for i in files]
+        files = os.listdir(videofile_path + 'videoheader')
+        video_urls = ['https://www.youtube.com//watch?v=' + i for i in files]
+    return video_urls
 
-    fingerpath = workdir + conf.get('extracion', 'fingerpath')
-    for url in urls:
-        video = Video(url)
-        video.analyse_websource()
-        video.analyse_video()
-        video.conbine_video()
 
-    with open(fingerpath + 'video_combine.csv', 'r') as f:
-        reader = csv.reader(f)
-        txt = list(reader)
-    txt = list(set([i[0] for i in txt[1:]]))
-    with open(url_list_path + 'url_segment.csv', 'w') as f:
-        for url in txt:
-            f.write(f'https://www.youtube.com/watch?v={url}\n')
+def main():
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(
+        description='视频指纹提取工具 - 用于下载YouTube视频和提取视频指纹',
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    # 读取配置文件
+    conf = configparser.ConfigParser()
+    conf.read('src/extraction/config.conf', encoding='utf-8')
+    workdir = os.getcwd() + os.sep
+    
+    # 运行模式
+    parser.add_argument('--mode', type=str, 
+                        choices=['download', 'fingerprint', 'fusion'],
+                        required=True,
+                        help='运行模式: download=批量下载, fingerprint=批量提取视频指纹, fusion=批量提取视频融合指纹')
+    
+    # URL来源参数
+    parser.add_argument('--if-use-url-list', type=int, choices=[0, 1],
+                        default=conf.getint('mode', 'if_use_url_list'),
+                        help='是否使用URL列表 (0=使用已下载的视频文件夹, 1=使用URL列表文件, 默认: 从配置文件读取)')
+    
+    # 路径参数
+    parser.add_argument('--url-list-path', type=str,
+                        default=workdir + conf.get('path', 'url_list_path') + 'url.csv',
+                        help='URL列表文件路径 (默认: 从配置文件读取)')
+    parser.add_argument('--videofile-path', type=str,
+                        default=workdir + conf.get('path', 'videofile_path'),
+                        help='视频文件存储路径 (默认: 从配置文件读取)')
+    parser.add_argument('--fingerprint-path', type=str,
+                        default=workdir + conf.get('path', 'fingerprint_path'),
+                        help='指纹文件保存路径 (默认: 从配置文件读取)')
+    
+    args = parser.parse_args()
+    
+    # 显示运行信息
+    print('=' * 60)
+    print('视频指纹提取工具')
+    print('=' * 60)
+    print(f'运行模式: {args.mode}')
+    print(f'URL来源: {"URL列表文件" if args.if_use_url_list else "本地视频文件夹"}')
+    print(f'URL列表路径: {args.url_list_path}' if args.if_use_url_list else f'视频文件路径: {args.videofile_path}')
+    print('=' * 60)
+    
+    # 获取视频URL列表
+    try:
+        video_urls = get_video_urls(args.if_use_url_list, args.url_list_path, args.videofile_path)
+        print(f'\n找到 {len(video_urls)} 个视频')
+        
+        # 根据模式执行相应操作
+        if args.mode == 'download':
+            print('\n开始批量下载视频...')
+            batch_download(video_urls, args.videofile_path, args.fingerprint_path)
+            print('\n批量下载完成!')
+            
+        elif args.mode == 'fingerprint':
+            print('\n开始批量提取视频指纹...')
+            batch_get_video_fingerprint(video_urls, args.videofile_path, args.fingerprint_path)
+            print('\n视频指纹提取完成!')
+            
+        elif args.mode == 'fusion':
+            print('\n开始批量提取视频融合指纹...')
+            batch_get_video_fusion_fingerprint(video_urls, args.videofile_path, args.fingerprint_path)
+            print('\n视频融合指纹提取完成!')
+            
+    except KeyboardInterrupt:
+        print('\n\n用户中断处理')
+    except Exception as e:
+        print(f'\n处理过程中出现错误: {str(e)}')
+        raise
 
 
 if __name__ == '__main__':
-    # batch_download()
-    batch_analyze()
-    # video = Video('https://www.youtube.com//watch?v=ILRp27Oes_0')
-    # video.get_websource()
-    # video.analyse_websource()
-    # video.download_video()
-    # video.analyse_video()
-    # video.conbine_video()
+    main()
+    """
+    python src/extraction/get_segment.py --mode download
+    python src/extraction/get_segment.py --mode fusion
+    """

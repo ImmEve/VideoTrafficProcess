@@ -1,18 +1,19 @@
 import configparser
+import os
 from mitmproxy import http
 
 
 class Mitm:
     def __init__(self):
         conf = configparser.ConfigParser()
-        conf.read('config.conf', encoding='UTF-8')
-        self.workdir = conf.get('global', 'workdir')
-        self.responsebody_filepath = self.workdir + conf.get('capture', 'responsebody_path') + 'log.csv'
+        conf.read('src/capture/config.conf', encoding='utf-8')
+        workdir = os.getcwd() + os.sep
+        self.responsebody_filepath = workdir + conf.get('path', 'responsebody_path') + 'log.csv'
 
     def response(self, flow: http.HTTPFlow) -> None:
         if 'videoplayback' in flow.request.pretty_url:
             response_body_size = len(flow.response.content)
-            if response_body_size > 1000:
+            if response_body_size > 10000:
                 with open(self.responsebody_filepath, 'a') as f:
                     f.write(str(response_body_size) + '\n')
                 print(f"Response body size: {response_body_size} bytes")

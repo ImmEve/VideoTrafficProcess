@@ -1,5 +1,5 @@
 import configparser
-from capture.web_driver import Webdriver
+from capture.selenium.web_driver import Webdriver
 from extraction.get_segment import *
 
 conf = configparser.ConfigParser()
@@ -9,7 +9,7 @@ workdir = conf.get('global', 'workdir')
 class ProcessUrl():
     def __init__(self):
         self.url_list_path = workdir + conf.get('capture', 'url_list_path')
-        with open(self.url_list_path + 'url.csv', 'r', encoding='utf-8') as f:
+        with open(self.url_list_path + 'url_1565.csv', 'r', encoding='utf-8') as f:
             self.url_list = f.readlines()
         self.url_list = list(set([url.strip() for url in self.url_list if url.strip()]))
         self.url_list.sort()
@@ -19,7 +19,8 @@ class ProcessUrl():
         self.filter_url_list = []
         self.errorlog = workdir + conf.get('capture', 'errorlog')
         self.pcap_path = workdir + conf.get('capture', 'pcap_path')
-        self.datapath = workdir + conf.get('get_segment', 'datapath')
+        self.responsebody_path = workdir + conf.get('capture', 'responsebody_path')
+        self.datapath = workdir + conf.get('extraction', 'datapath')
         self.loop_count = 5
 
     def batch_get_websource(self):
@@ -38,7 +39,7 @@ class ProcessUrl():
                 with open(self.errorlog, 'a') as f:
                     f.write(f'{url}: get websource error\n')
 
-    def check(self, url):
+    def check_itag_duration(self, url):
         video = Video(url)
         vid = url.split('=')[-1]
         try:
@@ -57,7 +58,7 @@ class ProcessUrl():
     def batch_check(self):
         with open(self.url_list_path + 'url_check.csv', 'w', encoding='utf-8') as f:
             for url in self.url_list:
-                if self.check(url) == 1:
+                if self.check_itag_duration(url) == 1:
                     f.write(url + '\n')
 
     def clawer_url(self):
@@ -75,7 +76,8 @@ class ProcessUrl():
         urllist = list(set(urllist))
         with open(self.url_list_path + 'url_clawer.csv', 'w') as f:
             for url in urllist:
-                f.write(url[:44] + '\n')
+                vid = url.split('=')[1][:11]
+                f.write('https://www.youtube.com/watch?v=' + vid + '\n')
 
     # 获取采集完毕的url
     def captured_url(self):
@@ -102,7 +104,7 @@ class ProcessUrl():
         with open(self.url_list_path + 'url_redo.csv', 'w') as f:
             f.write('\n'.join(urls))
 
-    def remove_error(self):
+    def remove_error_file(self):
         with open(self.errorlog, 'r') as f:
             datas = f.readlines()
         error_urls = ['https://www.youtube.com/watch?v=' + i.split(':')[0] for i in datas]
@@ -111,8 +113,25 @@ class ProcessUrl():
         with open(self.url_list_path + 'url_new.csv', 'w') as f:
             f.write('\n'.join(new_urls))
 
-        # dir_response = os.listdir(self.responsebody_path)
-        # dir_pcap = os.listdir(self.pcap_path)
+        dir_response = os.listdir(self.responsebody_path)
+        dir_pcap = os.listdir(self.pcap_path)
+        for file in dir_response:
+            vid = file.split('.')[0]
+            if 'https://www.youtube.com/watch?v=' + vid not in new_urls:
+                if os.path.exists(f'{self.responsebody_path}{vid}.html'):
+                    try:
+                        os.remove(f'{self.responsebody_path}{vid}.html')
+                    except:
+                        print(f'{vid}: remove responsebody error')
+        for file in dir_pcap:
+            vid = file.split('.')[0]
+            if 'https://www.youtube.com/watch?v=' + vid not in new_urls:
+                if os.path.exists(f'{self.pcap_path}{vid}.pcap'):
+                    try:
+                        os.remove(f'{self.pcap_path}{vid}.pcap')
+                    except:
+                        print(f'{vid}: remove pcap error')
+        
         dir_websource = os.listdir(self.datapath + 'websource/')
         dir_videoheader = os.listdir(self.datapath + 'videoheader/')
         for file in dir_websource:
@@ -133,12 +152,26 @@ class ProcessUrl():
                         print(e)
                         print(f'{vid}: remove videoheader error')
 
+    def remove_error_url(self):
+        with open(self.errorlog, 'r') as f:
+            datas = f.readlines()
+        error_urls = ['https://www.youtube.com/watch?v=' + i.split(':')[0] for i in datas]
+        new_urls = list(set(self.url_list) - set(error_urls))
+        new_urls.sort()
+        with open(self.url_list_path + 'url_new.csv', 'w') as f:
+            f.write('\n'.join(new_urls))
+
+    # 清楚多余响应
+    def clean_response(self):
+        dir_response = os.listdir(self.responsebody_path)
+        for file in dir_response:
+            filename = file.split('.')[0]
+            if not os.path.exists(f'{self.pcap_path}{filename}.pcap'):
+                print(f'{self.responsebody_path}{file}')
+                os.remove(f'{self.responsebody_path}{file}')
+
 
 if __name__ == '__main__':
     process_url = ProcessUrl()
-    # process_url.clawer_url()
-    process_url.batch_check()
-    # process_url.batch_get_websource()
-    # process_url.captured_url()
-    # process_url.redo_url()
-    # process_url.remove_error()
+    # process_url.batch_check()
+    process_url.remove_error_url()

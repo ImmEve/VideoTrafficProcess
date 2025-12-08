@@ -1,4 +1,5 @@
 import configparser
+import os
 import time
 from lxml import etree
 from selenium import webdriver
@@ -11,11 +12,11 @@ from selenium.webdriver.common.action_chains import ActionChains
 class Webdriver():
     def __init__(self):
         conf = configparser.ConfigParser()
-        conf.read('config.conf', encoding='UTF-8')
-        self.workdir = conf.get('global', 'workdir')
-        self.chrome_driver_path = self.workdir + conf.get('capture', 'chrome_driver_path')
-        self.chrome_user_data_path = conf.get('capture', 'chrome_user_data_path')
-        self.errorlog = self.workdir + conf.get('capture', 'errorlog')
+        conf.read('src/capture/config.conf', encoding='utf-8')
+        workdir = os.getcwd() + os.sep
+        self.chrome_driver_path = workdir + conf.get('chrome', 'chrome_driver_path')
+        self.chrome_user_data_path = conf.get('chrome', 'chrome_user_data_path')
+        self.errorlog = workdir + conf.get('path', 'errorlog')
         self.loop_count = 10
         self.driver = self.chrome_driver_init()
 
@@ -29,6 +30,7 @@ class Webdriver():
         options.add_argument('--user-data-dir=' + self.chrome_user_data_path)
         options.add_argument('--disable-cache')
         options.add_argument('--disk-cache-size=0')
+        options.add_argument('--disable-blink-features=AutomationControlled')
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_window_size(1000, 30000)
         wait = WebDriverWait(driver, 100)
@@ -129,9 +131,9 @@ class Webdriver():
         for i in range(0, self.loop_count):
             try:
                 time.sleep(3)
-                element = self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]')
+                element = self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]')
                 ActionChains(self.driver).context_click(element).perform()
-                self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-contextmenu"]//*[@class="ytp-menuitem-label" and text()="详细统计信息"]').click()
+                self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-contextmenu ytp-delhi-modern-contextmenu"]//*[@class="ytp-menuitem-label" and text()="详细统计信息"]').click()
                 time.sleep(1)
                 videoinfo = self.driver.find_element(By.XPATH, '//*[@class="html5-video-info-panel ytp-sfn"]//*[@class="html5-video-info-panel-content ytp-sfn-content"]').text
                 codecs = videoinfo.split('\nCodecs ')[1].split('\nColor ')[0]
@@ -152,15 +154,13 @@ class Webdriver():
             try:
                 time.sleep(3)
                 # 点击设置
-                # self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
-                self.driver.find_element(By.XPATH,'//*[@aria-controls="ytp-id-18"]').click()
+                self.driver.find_element(By.XPATH, '//*[@class="ytp-button ytp-settings-button"]').click()
                 # 点击画质
-                # self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menu-label-secondary"]').click()
-                self.driver.find_element(By.XPATH,'//*[@id="ytp-id-18"]//*[@class="ytp-menu-label-secondary"]').click()
+                self.driver.find_element(By.XPATH, '//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menu-label-secondary"]').click()
                 time.sleep(1)
                 # 选择最高分辨率
-                # self.driver.find_element(By.XPATH, f'//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menuitem-label"]/div/span[text()="{resolution}"]').click()
-                self.driver.find_element(By.XPATH, f'//*[@id="ytp-id-18"]//*[@class="ytp-menuitem-label"]/div/span[text()="{resolution}"]').click()
+                self.driver.find_element(By.XPATH, f'//*[@class="ytp-popup ytp-settings-menu"]//*[@class="ytp-menuitem-label"]/div/span[text()="{resolution}"]').click()
+                print(f'resolution change: {resolution}')
                 return 1
             except:
                 pass
@@ -186,5 +186,11 @@ class Webdriver():
         return video_urls
 
 if __name__ == '__main__':
+    url = 'https://www.youtube.com/watch?v=uYlH3SAIXUQ'
     wd = Webdriver()
-    wd.loop_get_url('https://www.youtube.com/watch?v=uYlH3SAIXUQ')
+    wd.loop_get_url(url)
+    time.sleep(5)
+    wd.change_video_resolution(url, '720p')
+    time.sleep(5)
+    wd.get_itag(url)
+    time.sleep(1000)
